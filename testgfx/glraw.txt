@@ -1,0 +1,19 @@
+glUseProgram
+
+set shader uniforms (matrices, etc.)
+
+bind textures to texture units
+	and texture units to uniforms
+
+// for vertices, UVs, normals, tangents, bitangents.
+glEnableVertexAttribArray(n)
+glBindBuffer GL_ARRAY_BUFFER
+
+// indices
+glBindBuffer GL_ELEMENT_ARRAY_BUFFER
+
+glDrawElements GL_TRIANGLES numIndices GL_UNSIGNED_INT 0
+
+glDisableVertexAttribArray(n)
+
+swap buffers
