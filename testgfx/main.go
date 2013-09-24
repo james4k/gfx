@@ -67,34 +67,37 @@ func main() {
 	}
 }
 
-func createTexture(r io.Reader) (gl.Texture, error) {
+func createTexture(r io.Reader) (gfx.Sampler, error) {
 	img, err := png.Decode(r)
 	if err != nil {
-		return gl.Texture(0), err
+		return nil, err
 	}
 
 	rgbaImg, ok := img.(*image.NRGBA)
 	if !ok {
-		return gl.Texture(0), errors.New("texture must be an NRGBA image")
+		return nil, errors.New("texture must be an NRGBA image")
 	}
+	return gfx.Image(rgbaImg)
 
-	textureId := gl.GenTexture()
-	textureId.Bind(gl.TEXTURE_2D)
-	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+	/*
+		textureId := gl.GenTexture()
+		textureId.Bind(gl.TEXTURE_2D)
+		gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+		gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
 
-	// flip image: first pixel is lower left corner
-	imgWidth, imgHeight := img.Bounds().Dx(), img.Bounds().Dy()
-	data := make([]byte, imgWidth*imgHeight*4)
-	lineLen := imgWidth * 4
-	dest := len(data) - lineLen
-	for src := 0; src < len(rgbaImg.Pix); src += rgbaImg.Stride {
-		copy(data[dest:dest+lineLen], rgbaImg.Pix[src:src+rgbaImg.Stride])
-		dest -= lineLen
-	}
-	gl.TexImage2D(gl.TEXTURE_2D, 0, 4, imgWidth, imgHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, data)
+		// flip image: first pixel is lower left corner
+		imgWidth, imgHeight := img.Bounds().Dx(), img.Bounds().Dy()
+		data := make([]byte, imgWidth*imgHeight*4)
+		lineLen := imgWidth * 4
+		dest := len(data) - lineLen
+		for src := 0; src < len(rgbaImg.Pix); src += rgbaImg.Stride {
+			copy(data[dest:dest+lineLen], rgbaImg.Pix[src:src+rgbaImg.Stride])
+			dest -= lineLen
+		}
+		gl.TexImage2D(gl.TEXTURE_2D, 0, 4, imgWidth, imgHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, data)
 
-	return textureId, nil
+		return textureId, nil
+	*/
 }
 
 var cube struct {
@@ -104,8 +107,8 @@ var cube struct {
 	viewM          mathgl.Mat4f
 	worldM         mathgl.Mat4f
 	WorldViewProjM [16]float32 `uniform:"WorldViewProjectionM"`
-
-	geom gfx.Geometry
+	Diffuse        gfx.Sampler `uniform:"Diffuse"`
+	geom           gfx.Geometry
 }
 
 func initScene() (err error) {
@@ -146,16 +149,40 @@ func initScene() (err error) {
 
 	gfx.DefaultVertexAttributes[gfx.VertexPosition] = "Position"
 	gfx.DefaultVertexAttributes[gfx.VertexColor] = "Color"
+	gfx.DefaultVertexAttributes[gfx.VertexTexcoord] = "UV"
 	gfx.DefaultVertexAttributes[gfx.VertexNormal] = "Normal"
-	builder := gfx.BuildGeometry(gfx.DefaultVertexAttributes.Format())
-	builder.Position(-1, -1, 0).Color(1, 0, 0).Normal(1, 0, 0)
-	builder.Next()
-	builder.Position(1, -1, 0).Color(0, 1, 0).Normal(1, 0, 0)
-	builder.Next()
-	builder.Position(1, 1, 0).Color(0, 0, 1).Normal(1, 0, 0)
-	builder.Next()
-	builder.Position(-1, 1, 0).Color(1, 1, 1).Normal(1, 0, 0)
-	builder.SetIndices(0, 1, 2, 2, 0, 3)
+	vfmt := gfx.DefaultVertexAttributes.Format()
+	builder := gfx.BuildGeometry(vfmt)
+	builder.Position(-1, -1, 1).Texcoord(0, 0).Color(1, 1, 1).Normal(0, 0, 1)
+	builder.Position(1, -1, 1).Texcoord(1, 0)
+	builder.Position(1, 1, 1).Texcoord(1, 1)
+	builder.Position(-1, 1, 1).Texcoord(0, 1)
+	builder.Indices(0, 1, 2, 2, 0, 3)
+	builder.Position(-1, -1, -1).Texcoord(0, 0).Normal(0, 0, -1)
+	builder.Position(-1, 1, -1).Texcoord(1, 0)
+	builder.Position(1, 1, -1).Texcoord(1, 1)
+	builder.Position(1, -1, -1).Texcoord(0, 1)
+	builder.Indices(0, 1, 2, 2, 0, 3)
+	builder.Position(-1, 1, -1).Texcoord(0, 0).Normal(0, 1, 0)
+	builder.Position(-1, 1, 1).Texcoord(1, 0)
+	builder.Position(1, 1, 1).Texcoord(1, 1)
+	builder.Position(1, 1, -1).Texcoord(0, 1)
+	builder.Indices(0, 1, 2, 2, 0, 3)
+	builder.Position(-1, -1, -1).Texcoord(0, 0).Normal(0, -1, 0)
+	builder.Position(1, -1, -1).Texcoord(1, 0)
+	builder.Position(1, -1, 1).Texcoord(1, 1)
+	builder.Position(-1, -1, 1).Texcoord(0, 1)
+	builder.Indices(0, 1, 2, 2, 0, 3)
+	builder.Position(1, -1, -1).Texcoord(0, 0).Normal(1, 0, 0)
+	builder.Position(1, 1, -1).Texcoord(1, 0)
+	builder.Position(1, 1, 1).Texcoord(1, 1)
+	builder.Position(1, -1, 1).Texcoord(0, 1)
+	builder.Indices(0, 1, 2, 2, 0, 3)
+	builder.Position(-1, -1, -1).Texcoord(0, 0).Normal(-1, 0, 0)
+	builder.Position(-1, -1, 1).Texcoord(1, 0)
+	builder.Position(-1, 1, 1).Texcoord(1, 1)
+	builder.Position(-1, 1, -1).Texcoord(0, 1)
+	builder.Indices(0, 1, 2, 2, 0, 3)
 	cube.geom, err = gfx.NewGeometry(builder, gfx.StaticDraw)
 	if err != nil {
 		panic(err)
@@ -163,7 +190,10 @@ func initScene() (err error) {
 
 	shader := gfx.BuildShader(gfx.DefaultVertexAttributes, vs, fs)
 	cube.shader = shader
-	texture, err = createTexture(goph)
+	cube.Diffuse, err = createTexture(goph)
+	if err != nil {
+		panic(err)
+	}
 	return
 }
 
@@ -172,86 +202,14 @@ func destroyScene() {
 }
 
 func drawScene() {
+	rotx += 0.5
+	roty += 0.5
+
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-	/*
-		gl.MatrixMode(gl.MODELVIEW)
-		gl.LoadIdentity()
-		gl.Translatef(0, 0, -3.0)
-		gl.Rotatef(rotx, 1, 0, 0)
-		gl.Rotatef(roty, 0, 1, 0)
-
-		rotx += 0.5
-		roty += 0.5
-
-		texture.Bind(gl.TEXTURE_2D)
-
-		gl.Color4f(1, 1, 1, 1)
-
-		gl.Begin(gl.QUADS)
-
-		gl.Normal3f(0, 0, 1)
-		gl.TexCoord2f(0, 0)
-		gl.Vertex3f(-1, -1, 1)
-		gl.TexCoord2f(1, 0)
-		gl.Vertex3f(1, -1, 1)
-		gl.TexCoord2f(1, 1)
-		gl.Vertex3f(1, 1, 1)
-		gl.TexCoord2f(0, 1)
-		gl.Vertex3f(-1, 1, 1)
-
-		gl.Normal3f(0, 0, -1)
-		gl.TexCoord2f(1, 0)
-		gl.Vertex3f(-1, -1, -1)
-		gl.TexCoord2f(1, 1)
-		gl.Vertex3f(-1, 1, -1)
-		gl.TexCoord2f(0, 1)
-		gl.Vertex3f(1, 1, -1)
-		gl.TexCoord2f(0, 0)
-		gl.Vertex3f(1, -1, -1)
-
-		gl.Normal3f(0, 1, 0)
-		gl.TexCoord2f(0, 1)
-		gl.Vertex3f(-1, 1, -1)
-		gl.TexCoord2f(0, 0)
-		gl.Vertex3f(-1, 1, 1)
-		gl.TexCoord2f(1, 0)
-		gl.Vertex3f(1, 1, 1)
-		gl.TexCoord2f(1, 1)
-		gl.Vertex3f(1, 1, -1)
-
-		gl.Normal3f(0, -1, 0)
-		gl.TexCoord2f(1, 1)
-		gl.Vertex3f(-1, -1, -1)
-		gl.TexCoord2f(0, 1)
-		gl.Vertex3f(1, -1, -1)
-		gl.TexCoord2f(0, 0)
-		gl.Vertex3f(1, -1, 1)
-		gl.TexCoord2f(1, 0)
-		gl.Vertex3f(-1, -1, 1)
-
-		gl.Normal3f(1, 0, 0)
-		gl.TexCoord2f(1, 0)
-		gl.Vertex3f(1, -1, -1)
-		gl.TexCoord2f(1, 1)
-		gl.Vertex3f(1, 1, -1)
-		gl.TexCoord2f(0, 1)
-		gl.Vertex3f(1, 1, 1)
-		gl.TexCoord2f(0, 0)
-		gl.Vertex3f(1, -1, 1)
-
-		gl.Normal3f(-1, 0, 0)
-		gl.TexCoord2f(0, 0)
-		gl.Vertex3f(-1, -1, -1)
-		gl.TexCoord2f(1, 0)
-		gl.Vertex3f(-1, -1, 1)
-		gl.TexCoord2f(1, 1)
-		gl.Vertex3f(-1, 1, 1)
-		gl.TexCoord2f(0, 1)
-		gl.Vertex3f(-1, 1, -1)
-
-		gl.End()
-	*/
+	rotmat := mathgl.HomogRotate3DX(rotx).Mul4(mathgl.HomogRotate3DY(roty))
+	cube.worldM = mathgl.Translate3D(0, 0, 2).Mul4(rotmat)
+	cube.WorldViewProjM = [16]float32(cube.projM.Mul4(cube.viewM).Mul4(cube.worldM))
 
 	cube.shader.Use()
 	cube.shader.SetUniforms(cube)

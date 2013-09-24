@@ -1,7 +1,6 @@
 package gfx
 
 import (
-	"fmt"
 	"github.com/go-gl/gl"
 	"reflect"
 )
@@ -117,6 +116,7 @@ func (s *Shader) SetUniforms(data interface{}) {
 	for i := 0; i < n; i++ {
 		f := typ.Field(i)
 		v := val.Field(i)
+		// TODO: skip unexported fields.. they will panic!
 		name := f.Tag.Get("uniform")
 		if name == "" {
 			continue
@@ -139,7 +139,13 @@ func (s *Shader) SetUniforms(data interface{}) {
 			val := iface.([16]float32)
 			u.UniformMatrix4f(false, &val)
 		default:
-			break
+			sampler := iface.(Sampler)
+			if sampler != nil {
+				u := s.prog.GetUniformLocation(name)
+				gl.ActiveTexture(gl.TEXTURE0)
+				sampler.bind()
+				u.Uniform1i(0)
+			}
 		}
 	}
 }
@@ -172,8 +178,8 @@ func (s *Shader) SetGeometry(geom Geometry) {
 		attrib = s.prog.GetAttribLocation(name)
 		if attrib >= 0 {
 			attrib.EnableArray()
-			attrib.AttribPointer(3, gl.FLOAT, false, stride, uintptr(offset))
-			//fmt.Println(name, attrib, stride, offset)
+			elems := uint(vertexBytes(i)) / 4
+			attrib.AttribPointer(elems, gl.FLOAT, false, stride, uintptr(offset))
 			s.prevArrays = append(s.prevArrays, attrib)
 		}
 		offset += vertexBytes(i)
@@ -185,11 +191,8 @@ func (s *Shader) SetGeometry(geom Geometry) {
 	indices.bind()
 }
 
-var _ = fmt.Println
-
 // Draw makes a glDrawElements call using the previously set uniforms and
 // geometry.
 func (s *Shader) Draw() {
-	//fmt.Println(s.indexCount)
 	gl.DrawElements(gl.TRIANGLES, s.indexCount, gl.UNSIGNED_SHORT, uintptr(s.indexOffset))
 }

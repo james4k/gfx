@@ -2,7 +2,6 @@ package gfx
 
 import (
 	"errors"
-	"fmt"
 	"github.com/go-gl/gl"
 	"reflect"
 	"runtime"
@@ -213,7 +212,7 @@ func (b *vertexBuf) Format() VertexFormat {
 type Geometry interface {
 	Indices() IndexBuffer
 	Vertices() VertexBuffer
-	CopyDataFrom(GeometryData) error
+	CopyFrom(GeometryData) error
 }
 
 type IndexBufferData interface {
@@ -249,7 +248,7 @@ func (g *geometry) Vertices() VertexBuffer {
 func NewGeometry(data GeometryData, usage Usage) (Geometry, error) {
 	geom := initGeom(usage)
 	geom.vertices.format = data.VertexFormat()
-	err := geom.CopyDataFrom(data)
+	err := geom.CopyFrom(data)
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +274,7 @@ func initGeom(usage Usage) *geometry {
 
 var errBadVertexFormat = errors.New("gfx: bad vertex format")
 
-func (g *geometry) CopyDataFrom(data GeometryData) error {
+func (g *geometry) CopyFrom(data GeometryData) error {
 	vf := data.VertexFormat()
 	if g.vertices.Format() != vf {
 		return errBadVertexFormat
@@ -365,19 +364,22 @@ func StaticGeometry(indices []uint16, vertices []float32, format VertexFormat) G
 }
 
 type GeometryBuilder struct {
-	vf      VertexFormat
-	stride  int
-	cur     int
-	offsets map[VertexFormat]int
-	verts   []float32
-	idxs    []uint16
+	vf       VertexFormat
+	stride   int
+	cur      int
+	curvf    VertexFormat // data that's been set on the current vertex
+	lastdata map[VertexFormat][]float32
+	offsets  map[VertexFormat]int
+	verts    []float32
+	idxs     []uint16
+	nextidx  uint16
 }
 
 func BuildGeometry(vf VertexFormat) *GeometryBuilder {
 	return &GeometryBuilder{
-		vf:     vf,
-		stride: vf.Stride() / 4,
-		verts:  make([]float32, vf.Stride()/4),
+		vf:       vf,
+		stride:   vf.Stride() / 4,
+		lastdata: map[VertexFormat][]float32{},
 	}
 }
 
@@ -399,34 +401,81 @@ func (g *GeometryBuilder) offset(v VertexFormat) int {
 	return g.cur + g.offsets[v]
 }
 
-func (g *GeometryBuilder) Next() {
-	g.cur += g.stride
+func (g *GeometryBuilder) next() {
+	if g.verts != nil {
+		g.cur += g.stride
+	}
+	g.curvf = 0
 	zeros := make([]float32, g.stride)
 	g.verts = append(g.verts, zeros...)
 }
 
-func (g *GeometryBuilder) set(v VertexFormat, data []float32) {
-	offs := g.offset(v)
-	fmt.Println(v, offs)
-	copy(g.verts[offs:offs+3], data)
+// fillVertex fills the rest of the vertex data using the last set data
+// from a previous vertex
+func (g *GeometryBuilder) fillVertex() {
+	for i := VertexFormat(1); i <= MaxVertexFormat; i <<= 1 {
+		if g.vf&i != 0 && g.curvf&i == 0 {
+			data, ok := g.lastdata[i]
+			if ok {
+				g.set(i, data)
+			}
+		}
+	}
 }
 
+func (g *GeometryBuilder) set(v VertexFormat, data []float32) {
+	offs := g.offset(v)
+	dst := g.verts[offs : offs+len(data)]
+	copy(dst, data)
+	g.curvf |= v
+	g.lastdata[v] = dst
+}
+
+// Position creates a new vertex and sets the vertex position.
+// TODO: set unset data for previous vertex to the last data the user provided
 func (g *GeometryBuilder) Position(x, y, z float32) *GeometryBuilder {
+	g.fillVertex()
+	g.next()
 	g.set(VertexPosition, []float32{x, y, z})
 	return g
 }
 
+// Color sets the vertex color.
 func (gb *GeometryBuilder) Color(r, g, b float32) *GeometryBuilder {
 	gb.set(VertexColor, []float32{r, g, b})
 	return gb
 }
 
+// Normal sets the vertex normal.
 func (g *GeometryBuilder) Normal(x, y, z float32) *GeometryBuilder {
 	g.set(VertexNormal, []float32{x, y, z})
 	return g
 }
 
+// Texcoord sets the vertex texture coordinate.
+func (g *GeometryBuilder) Texcoord(u, v float32) *GeometryBuilder {
+	g.set(VertexTexcoord, []float32{u, v})
+	return g
+}
+
+// Indices appends new indices to the buffer that are relative to the maximum index in the buffer.
+func (g *GeometryBuilder) Indices(idxs ...uint16) *GeometryBuilder {
+	// TODO: could really use a test
+	newnext := g.nextidx
+	for i, idx := range idxs {
+		idx += g.nextidx
+		if idx >= newnext {
+			newnext = idx + 1
+		}
+		idxs[i] = idx
+	}
+	g.nextidx = newnext
+	g.idxs = append(g.idxs, idxs...)
+	return g
+}
+
 func (g *GeometryBuilder) SetIndices(idxs ...uint16) {
+	g.nextidx = 0
 	g.idxs = make([]uint16, len(idxs))
 	copy(g.idxs, idxs)
 }
@@ -449,13 +498,10 @@ func (g *GeometryBuilder) CopyIndices(buf []uint16) error {
 	if g.idxs != nil {
 		// TODO: check len
 		copy(buf, g.idxs)
-		fmt.Println("hm", len(buf), len(g.idxs))
-	} else {
-		for i := range buf {
-			buf[i] = uint16(i)
-			//buf[i] = 0
-		}
-		fmt.Println("hm", len(buf), buf)
+		return nil
+	}
+	for i := range buf {
+		buf[i] = uint16(i)
 	}
 	return nil
 }
@@ -467,9 +513,9 @@ func (g *GeometryBuilder) VertexCount() int {
 
 // CopyVertices copies the vertices directly into buf. If len(buf) does not equal VertexCount()*(VertexFormat().Stride()/4), an error is returned.
 func (g *GeometryBuilder) CopyVertices(buf []float32) error {
+	g.fillVertex()
 	// TODO: check len
 	copy(buf, g.verts)
-	fmt.Println("wat", len(buf), len(g.verts), g.stride, g.VertexCount(), buf, g.verts)
 	return nil
 }
 
