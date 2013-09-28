@@ -108,6 +108,8 @@ func (s *Shader) Use() {
 
 // SetUniforms takes struct fields with "uniform" tag and assigns their values
 // to the shader's uniform variables.
+// TODO: really need to return an error; a lot of room for user error here,
+// with uniform names and shit that need to be right.
 func (s *Shader) SetUniforms(data interface{}) {
 	// TODO: recurse down embedded structs to find their fields
 	val := reflect.ValueOf(data)
@@ -154,6 +156,7 @@ func (s *Shader) SetUniforms(data interface{}) {
 func (s *Shader) SetGeometry(geom Geometry) {
 	vertices := geom.Vertices()
 	if s.vertexFormat != vertices.Format() {
+		// TODO: really need to return an error; mainly for vertex format
 	}
 	var attrib gl.AttribLocation
 	vertices.bind()
@@ -193,6 +196,10 @@ func (s *Shader) SetGeometry(geom Geometry) {
 
 // Draw makes a glDrawElements call using the previously set uniforms and
 // geometry.
+// TODO: Need to think about glDrawElementsInstanced, and per-instance vertex
+// attributes (glVertexAttribDivisor). Will probably need a separate
+// DrawInstanced() method, or maybe add an instances parameter, or a
+// SetInstances method? Hmmz
 func (s *Shader) Draw() {
 	gl.DrawElements(gl.TRIANGLES, s.indexCount, gl.UNSIGNED_SHORT, uintptr(s.indexOffset))
 }

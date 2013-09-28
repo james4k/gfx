@@ -15,6 +15,7 @@ import (
 	"io"
 	"j4k.co/gfx"
 	"os"
+	"runtime"
 )
 
 const (
@@ -36,6 +37,8 @@ func errorCallback(err glfw.ErrorCode, desc string) {
 }
 
 func main() {
+	runtime.LockOSThread()
+
 	glfw.SetErrorCallback(errorCallback)
 
 	if !glfw.Init() {
@@ -43,27 +46,37 @@ func main() {
 	}
 	defer glfw.Terminate()
 
+	// must be done in main thread or we get a nasty stderr message from glfw,
+	// although it does seem to 'work'
 	window, err := glfw.CreateWindow(Width, Height, Title, nil, nil)
 	if err != nil {
 		panic(err)
 	}
 
-	window.MakeContextCurrent()
+	// separate thread for drawing so that we don't block on the event thread.
+	// most obvious benefit is that we continue to render during window
+	// resizes.
+	go func() {
+		runtime.LockOSThread()
 
-	glfw.SwapInterval(1)
+		window.MakeContextCurrent()
+		glfw.SwapInterval(1)
+		gl.Init()
+		if err := initScene(); err != nil {
+			fmt.Fprintf(os.Stderr, "init: %s\n", err)
+			return
+		}
+		defer destroyScene()
 
-	gl.Init()
+		for !window.ShouldClose() {
+			drawScene()
+			window.SwapBuffers()
+		}
+		os.Exit(0)
+	}()
 
-	if err := initScene(); err != nil {
-		fmt.Fprintf(os.Stderr, "init: %s\n", err)
-		return
-	}
-	defer destroyScene()
-
-	for !window.ShouldClose() {
-		drawScene()
-		window.SwapBuffers()
-		glfw.PollEvents()
+	for {
+		glfw.WaitEvents()
 	}
 }
 
