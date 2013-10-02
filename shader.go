@@ -16,27 +16,6 @@ type Shader struct {
 	prevArrays []gl.AttribLocation
 }
 
-type ModelMaterial struct {
-	*Shader "model.shader"
-
-	viewMatrix           Mat4
-	viewMatrixInverse    Mat4
-	projectionMatrix     Mat4
-	viewProjectionMatrix Mat4
-	viewPosition         Vec3
-
-	worldMatrix       Mat4
-	worldNormalMatrix Mat3
-
-	indices  IndexBuffer
-	vertices VertexBuffer
-
-	//Diffuse Sampler
-
-	// Idea: for shader combos, put inputs in an embedded struct with a tag
-	// defining the condition. or maybe just a tag is good enough..who knows
-}
-
 type ShaderSource interface {
 	typ() gl.GLenum
 	source() string
@@ -97,6 +76,10 @@ func (s *Shader) load() {
 
 	// Projection/view uniforms
 	//s.viewM = s.prog.GetUniformLocation("ViewM")
+}
+
+func (s *Shader) VertexFormat() VertexFormat {
+	return s.vertexFormat
 }
 
 func (s *Shader) Use() {

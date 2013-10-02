@@ -383,6 +383,26 @@ func BuildGeometry(vf VertexFormat) *GeometryBuilder {
 	}
 }
 
+func (g *GeometryBuilder) Clear() {
+	g.lastdata = map[VertexFormat][]float32{}
+	g.cur = 0
+	g.curvf = 0
+	g.offsets = nil
+	g.verts = g.verts[:0]
+	g.idxs = g.idxs[:0]
+	g.nextidx = 0
+}
+
+func (g *GeometryBuilder) Reset() {
+	g.lastdata = map[VertexFormat][]float32{}
+	g.cur = 0
+	g.curvf = 0
+	g.offsets = nil
+	g.verts = nil
+	g.idxs = nil
+	g.nextidx = 0
+}
+
 // TODO: add a test
 func (g *GeometryBuilder) offset(v VertexFormat) int {
 	if g.vf&v == 0 {
@@ -402,7 +422,7 @@ func (g *GeometryBuilder) offset(v VertexFormat) int {
 }
 
 func (g *GeometryBuilder) next() {
-	if g.verts != nil {
+	if len(g.verts) != 0 {
 		g.cur += g.stride
 	}
 	g.curvf = 0

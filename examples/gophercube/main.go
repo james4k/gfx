@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// This is an example taken from github.com/examples/glfw3 that's been modified
+// to test out some abstraction ideas.
+
 package main
 
 import (
@@ -25,11 +28,7 @@ const (
 )
 
 var (
-	texture    gl.Texture
 	rotx, roty float32
-	ambient    []float32 = []float32{0.5, 0.5, 0.5, 1}
-	diffuse    []float32 = []float32{1, 1, 1, 1}
-	lightpos   []float32 = []float32{-5, 5, 10, 0}
 )
 
 func errorCallback(err glfw.ErrorCode, desc string) {
@@ -66,7 +65,6 @@ func main() {
 			fmt.Fprintf(os.Stderr, "init: %s\n", err)
 			return
 		}
-		defer destroyScene()
 
 		for !window.ShouldClose() {
 			drawScene()
@@ -91,26 +89,6 @@ func createTexture(r io.Reader) (gfx.Sampler, error) {
 		return nil, errors.New("texture must be an NRGBA image")
 	}
 	return gfx.Image(rgbaImg)
-
-	/*
-		textureId := gl.GenTexture()
-		textureId.Bind(gl.TEXTURE_2D)
-		gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-		gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-
-		// flip image: first pixel is lower left corner
-		imgWidth, imgHeight := img.Bounds().Dx(), img.Bounds().Dy()
-		data := make([]byte, imgWidth*imgHeight*4)
-		lineLen := imgWidth * 4
-		dest := len(data) - lineLen
-		for src := 0; src < len(rgbaImg.Pix); src += rgbaImg.Stride {
-			copy(data[dest:dest+lineLen], rgbaImg.Pix[src:src+rgbaImg.Stride])
-			dest -= lineLen
-		}
-		gl.TexImage2D(gl.TEXTURE_2D, 0, 4, imgWidth, imgHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, data)
-
-		return textureId, nil
-	*/
 }
 
 var cube struct {
@@ -125,26 +103,12 @@ var cube struct {
 }
 
 func initScene() (err error) {
-	gl.Enable(gl.TEXTURE_2D)
 	gl.Enable(gl.DEPTH_TEST)
-	gl.Enable(gl.LIGHTING)
 
+	gl.Viewport(0, 0, Width, Height)
 	gl.ClearColor(0.5, 0.5, 0.5, 0.0)
 	gl.ClearDepth(1)
 	gl.DepthFunc(gl.LEQUAL)
-
-	gl.Lightfv(gl.LIGHT0, gl.AMBIENT, ambient)
-	gl.Lightfv(gl.LIGHT0, gl.DIFFUSE, diffuse)
-	gl.Lightfv(gl.LIGHT0, gl.POSITION, lightpos)
-	gl.Enable(gl.LIGHT0)
-
-	gl.Viewport(0, 0, Width, Height)
-	/*gl.MatrixMode(gl.PROJECTION)
-	gl.LoadIdentity()
-	gl.Frustum(-1, 1, -1, 1, 1.0, 10.0)
-	gl.MatrixMode(gl.MODELVIEW)
-	gl.LoadIdentity()
-	*/
 
 	cube.projM = mathgl.Ortho(-3, 3, -3, 3, -10.0, 10.0)
 	cube.viewM = mathgl.Ident4f()
@@ -208,10 +172,6 @@ func initScene() (err error) {
 		panic(err)
 	}
 	return
-}
-
-func destroyScene() {
-	texture.Delete()
 }
 
 func drawScene() {
