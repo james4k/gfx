@@ -232,9 +232,10 @@ type GeometryData interface {
 }
 
 type geometry struct {
-	indices  *indexBuf
-	vertices *vertexBuf
-	usage    Usage
+	indices     *indexBuf
+	vertices    *vertexBuf
+	usage       Usage
+	vertexArray gl.VertexArray
 }
 
 func (g *geometry) Indices() IndexBuffer {
@@ -265,10 +266,12 @@ func initGeom(usage Usage) *geometry {
 		vertices: &vertexBuf{
 			buf: bufs[1],
 		},
-		usage: usage,
+		usage:       usage,
+		vertexArray: gl.GenVertexArray(),
 	}
 	runtime.SetFinalizer(geom.indices, (*indexBuf).release)
 	runtime.SetFinalizer(geom.vertices, (*vertexBuf).release)
+	// TODO: finalizer for geom; need to remove VAO
 	return geom
 }
 
@@ -368,7 +371,7 @@ type GeometryBuilder struct {
 	stride   int
 	cur      int
 	curvf    VertexFormat // data that's been set on the current vertex
-	lastdata map[VertexFormat][]float32
+	lastdata map[VertexFormat]int
 	offsets  map[VertexFormat]int
 	verts    []float32
 	idxs     []uint16
@@ -379,27 +382,17 @@ func BuildGeometry(vf VertexFormat) *GeometryBuilder {
 	return &GeometryBuilder{
 		vf:       vf,
 		stride:   vf.Stride() / 4,
-		lastdata: map[VertexFormat][]float32{},
+		lastdata: make(map[VertexFormat]int, vf.Count()),
 	}
 }
 
+// Clear resets buffers to zero length.
 func (g *GeometryBuilder) Clear() {
-	g.lastdata = map[VertexFormat][]float32{}
+	g.lastdata = make(map[VertexFormat]int, len(g.lastdata))
 	g.cur = 0
 	g.curvf = 0
-	g.offsets = nil
 	g.verts = g.verts[:0]
 	g.idxs = g.idxs[:0]
-	g.nextidx = 0
-}
-
-func (g *GeometryBuilder) Reset() {
-	g.lastdata = map[VertexFormat][]float32{}
-	g.cur = 0
-	g.curvf = 0
-	g.offsets = nil
-	g.verts = nil
-	g.idxs = nil
 	g.nextidx = 0
 }
 
@@ -418,7 +411,7 @@ func (g *GeometryBuilder) offset(v VertexFormat) int {
 			}
 		}
 	}
-	return g.cur + g.offsets[v]
+	return g.offsets[v]
 }
 
 func (g *GeometryBuilder) next() {
@@ -435,8 +428,9 @@ func (g *GeometryBuilder) next() {
 func (g *GeometryBuilder) fillVertex() {
 	for i := VertexFormat(1); i <= MaxVertexFormat; i <<= 1 {
 		if g.vf&i != 0 && g.curvf&i == 0 {
-			data, ok := g.lastdata[i]
+			offs, ok := g.lastdata[i]
 			if ok {
+				data := g.verts[offs : offs+vertexBytes(i)/4]
 				g.set(i, data)
 			}
 		}
@@ -444,11 +438,10 @@ func (g *GeometryBuilder) fillVertex() {
 }
 
 func (g *GeometryBuilder) set(v VertexFormat, data []float32) {
-	offs := g.offset(v)
-	dst := g.verts[offs : offs+len(data)]
-	copy(dst, data)
 	g.curvf |= v
-	g.lastdata[v] = dst
+	offs := g.cur + g.offset(v)
+	g.lastdata[v] = offs
+	copy(g.verts[offs:offs+len(data)], data)
 }
 
 // Position creates a new vertex and sets the vertex position.

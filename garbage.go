@@ -12,6 +12,8 @@ type garbage struct {
 	buffers []gl.Buffer
 }
 
+// TODO: this needs to be thread-local!! might have to do this shit in C, or at
+// least a thread-local allocation.
 var trashbin garbage
 
 func (g *garbage) addBuffer(b gl.Buffer) {

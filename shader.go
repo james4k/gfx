@@ -1,6 +1,7 @@
 package gfx
 
 import (
+	"errors"
 	"github.com/go-gl/gl"
 	"reflect"
 )
@@ -12,8 +13,6 @@ type Shader struct {
 
 	indexCount  int
 	indexOffset int
-
-	prevArrays []gl.AttribLocation
 }
 
 type ShaderSource interface {
@@ -51,14 +50,16 @@ func BuildShader(attrs VertexAttributes, srcs ...ShaderSource) *Shader {
 		s := gl.CreateShader(src.typ())
 		s.Source(src.source())
 		s.Compile()
-		// TODO: check for compile errors
+		// TODO: user should pass in an io.Writer for us to write the log to
+		// TODO: does glGetError give us anything more definitive?
 		println(s.GetInfoLog())
 		shader.prog.AttachShader(s)
 		ss[i] = s
 	}
 	shader.prog.Link()
+	// TODO: user should pass in an io.Writer for us to write the log to
+	// TODO: does glGetError give us anything more definitive?
 	println(shader.prog.GetInfoLog())
-	// TODO: check for link errors
 	// TODO: we can probably return an error...but do we provide compile/link
 	// errors or throw those at a logger?
 	// TODO: add finalizer for program
@@ -71,17 +72,11 @@ func BuildShader(attrs VertexAttributes, srcs ...ShaderSource) *Shader {
 	return shader
 }
 
-func (s *Shader) load() {
-	// TODO: compile/attach shaders and such
-
-	// Projection/view uniforms
-	//s.viewM = s.prog.GetUniformLocation("ViewM")
-}
-
 func (s *Shader) VertexFormat() VertexFormat {
 	return s.vertexFormat
 }
 
+// Use puts the shader as the active program to bind data to and execute.
 func (s *Shader) Use() {
 	// checkpoint here for releasing unused GL resources
 	releaseGarbage()
@@ -135,19 +130,28 @@ func (s *Shader) SetUniforms(data interface{}) {
 	}
 }
 
-// SetGeometry sets the vertex attributes and binds the index buffer.
-func (s *Shader) SetGeometry(geom Geometry) {
+type GeometryLayout struct {
+	vao    gl.VertexArray
+	geom   Geometry
+	shader *Shader
+}
+
+func (g *GeometryLayout) Geometry() Geometry {
+	return g.geom
+}
+
+// LayoutGeometry builds a vertex array object holding vertex attribute locations and
+// buffer pointers for the given geometry.
+func (s *Shader) LayoutGeometry(geom Geometry) *GeometryLayout {
 	vertices := geom.Vertices()
 	if s.vertexFormat != vertices.Format() {
 		// TODO: really need to return an error; mainly for vertex format
 	}
+	vao := gl.GenVertexArray()
+	vao.Bind()
+
 	var attrib gl.AttribLocation
 	vertices.bind()
-
-	for _, a := range s.prevArrays {
-		a.DisableArray()
-	}
-	s.prevArrays = s.prevArrays[:0]
 
 	var i VertexFormat
 	offset := 0
@@ -163,18 +167,35 @@ func (s *Shader) SetGeometry(geom Geometry) {
 		}
 		attrib = s.prog.GetAttribLocation(name)
 		if attrib >= 0 {
-			attrib.EnableArray()
 			elems := uint(vertexBytes(i)) / 4
 			attrib.AttribPointer(elems, gl.FLOAT, false, stride, uintptr(offset))
-			s.prevArrays = append(s.prevArrays, attrib)
+			attrib.EnableArray()
 		}
 		offset += vertexBytes(i)
 	}
 
-	indices := geom.Indices()
+	geom.Indices().bind()
+
+	layout := &GeometryLayout{
+		vao:    vao,
+		geom:   geom,
+		shader: s,
+	}
+	// TODO: finalizer to delete VAO
+	return layout
+}
+
+// SetGeometryLayout binds the underlying vertex array object that holds the buffer pointers.
+func (s *Shader) SetGeometryLayout(layout *GeometryLayout) error {
+	// TODO: come up with a more sophistcated layout compatibility check. abstract this away from the shader somehow.
+	if layout.shader != s {
+		return errors.New("gfx: geometry layout not compatible with this shader")
+	}
+	indices := layout.Geometry().Indices()
 	s.indexCount = indices.Count()
 	s.indexOffset = indices.Offset()
-	indices.bind()
+	layout.vao.Bind()
+	return nil
 }
 
 // Draw makes a glDrawElements call using the previously set uniforms and

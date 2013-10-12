@@ -47,6 +47,6 @@ func imageRGBA(pix []byte, width, height int) (Sampler, error) {
 	t.bind()
 	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-	gl.TexImage2D(gl.TEXTURE_2D, 0, 4, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, pix)
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, pix)
 	return t, nil
 }
