@@ -290,18 +290,20 @@ func (g *geometry) CopyFrom(data GeometryData) error {
 	idxlen := data.IndexCount()
 	idxsize := 2 * idxlen
 	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, idxsize, nil, g.usage.gl())
-	for stop := false; !stop; {
-		ptr := gl.MapBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.WRITE_ONLY)
-		slicehdr := reflect.SliceHeader{
-			Data: uintptr(ptr),
-			Len:  idxlen,
-			Cap:  idxlen,
-		}
-		slice := *(*[]uint16)(unsafe.Pointer(&slicehdr))
-		err := data.CopyIndices(slice)
-		stop = gl.UnmapBuffer(gl.ELEMENT_ARRAY_BUFFER)
-		if err != nil {
-			return err
+	if idxsize > 0 {
+		for stop := false; !stop; {
+			ptr := gl.MapBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.WRITE_ONLY)
+			slicehdr := reflect.SliceHeader{
+				Data: uintptr(ptr),
+				Len:  idxlen,
+				Cap:  idxlen,
+			}
+			slice := *(*[]uint16)(unsafe.Pointer(&slicehdr))
+			err := data.CopyIndices(slice)
+			stop = gl.UnmapBuffer(gl.ELEMENT_ARRAY_BUFFER)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	g.indices.offset = 0
@@ -311,18 +313,20 @@ func (g *geometry) CopyFrom(data GeometryData) error {
 	vertlen := data.VertexCount()
 	vertsize := vf.Stride() * vertlen
 	gl.BufferData(gl.ARRAY_BUFFER, vertsize, nil, g.usage.gl())
-	for stop := false; !stop; {
-		ptr := gl.MapBuffer(gl.ARRAY_BUFFER, gl.WRITE_ONLY)
-		slicehdr := reflect.SliceHeader{
-			Data: uintptr(ptr),
-			Len:  vertsize / 4,
-			Cap:  vertsize / 4,
-		}
-		slice := *(*[]float32)(unsafe.Pointer(&slicehdr))
-		err := data.CopyVertices(slice)
-		stop = gl.UnmapBuffer(gl.ARRAY_BUFFER)
-		if err != nil {
-			return err
+	if vertsize > 0 {
+		for stop := false; !stop; {
+			ptr := gl.MapBuffer(gl.ARRAY_BUFFER, gl.WRITE_ONLY)
+			slicehdr := reflect.SliceHeader{
+				Data: uintptr(ptr),
+				Len:  vertsize / 4,
+				Cap:  vertsize / 4,
+			}
+			slice := *(*[]float32)(unsafe.Pointer(&slicehdr))
+			err := data.CopyVertices(slice)
+			stop = gl.UnmapBuffer(gl.ARRAY_BUFFER)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	g.vertices.count = vertlen

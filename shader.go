@@ -175,6 +175,7 @@ func (s *Shader) LayoutGeometry(geom Geometry) *GeometryLayout {
 	}
 
 	geom.Indices().bind()
+	gl.VertexArray(0).Bind()
 
 	layout := &GeometryLayout{
 		vao:    vao,
@@ -206,4 +207,5 @@ func (s *Shader) SetGeometryLayout(layout *GeometryLayout) error {
 // SetInstances method? Hmmz
 func (s *Shader) Draw() {
 	gl.DrawElements(gl.TRIANGLES, s.indexCount, gl.UNSIGNED_SHORT, uintptr(s.indexOffset))
+	gl.VertexArray(0).Bind()
 }
