@@ -65,10 +65,16 @@ const (
 	MaxVertexFormat = VertexUserData3
 )
 
-// vertexBytes gives the byte size of a specific piece of vertex data
-func vertexBytes(v VertexFormat) int {
+// TODO: we need to convert the following 4 funcs into a table or something
+
+// attribBytes gives the byte size of a specific piece of vertex data
+func attribBytes(v VertexFormat) int {
 	const fsize = 4
 	switch v {
+	case VertexColor,
+		VertexColor1:
+		// RGBA, 8-bit channels
+		return 4
 	case VertexTexcoord,
 		VertexTexcoord1,
 		VertexTexcoord2,
@@ -89,6 +95,56 @@ func vertexBytes(v VertexFormat) int {
 	panic("unreachable")
 }
 
+// attribType gives the GL type of a specific piece of vertex data
+func attribType(v VertexFormat) gl.GLenum {
+	switch v {
+	case VertexColor,
+		VertexColor1:
+		return gl.UNSIGNED_BYTE
+	default:
+		return gl.FLOAT
+	}
+	panic("unreachable")
+}
+
+// attribNormalized specifies integral value to be normalized to [0.0-1.0] for unsigned, yata yata.
+func attribNormalized(v VertexFormat) bool {
+	switch v {
+	case VertexColor,
+		VertexColor1:
+		return true
+	default:
+		return false
+	}
+	panic("unreachable")
+}
+
+// attribElems gives the number of elements for a specific piece of vertex data
+func attribElems(v VertexFormat) uint {
+	switch v {
+	case VertexColor,
+		VertexColor1:
+		return 4
+	case VertexTexcoord,
+		VertexTexcoord1,
+		VertexTexcoord2,
+		VertexTexcoord3,
+		VertexTexcoord4,
+		VertexTexcoord5,
+		VertexTexcoord6,
+		VertexTexcoord7:
+		return 2
+	case VertexUserData,
+		VertexUserData1,
+		VertexUserData2,
+		VertexUserData3:
+		return 4
+	default:
+		return 3
+	}
+	panic("unreachable")
+}
+
 // TODO: add tests for Stride and Count
 
 // Stride gives the stride in bytes for a vertex buffer.
@@ -97,7 +153,7 @@ func (v VertexFormat) Stride() int {
 	stride := 0
 	for i = 1; i <= MaxVertexFormat; i <<= 1 {
 		if v&i != 0 {
-			stride += vertexBytes(i)
+			stride += attribBytes(i)
 		}
 	}
 	return stride
@@ -223,7 +279,7 @@ type IndexBufferData interface {
 type VertexBufferData interface {
 	VertexCount() int
 	VertexFormat() VertexFormat
-	CopyVertices(buf []float32) error
+	CopyVertices(buf []byte) error
 }
 
 type GeometryData interface {
@@ -318,10 +374,10 @@ func (g *geometry) CopyFrom(data GeometryData) error {
 			ptr := gl.MapBuffer(gl.ARRAY_BUFFER, gl.WRITE_ONLY)
 			slicehdr := reflect.SliceHeader{
 				Data: uintptr(ptr),
-				Len:  vertsize / 4,
-				Cap:  vertsize / 4,
+				Len:  vertsize,
+				Cap:  vertsize,
 			}
-			slice := *(*[]float32)(unsafe.Pointer(&slicehdr))
+			slice := *(*[]byte)(unsafe.Pointer(&slicehdr))
 			err := data.CopyVertices(slice)
 			stop = gl.UnmapBuffer(gl.ARRAY_BUFFER)
 			if err != nil {
@@ -377,7 +433,7 @@ type GeometryBuilder struct {
 	curvf    VertexFormat // data that's been set on the current vertex
 	lastdata map[VertexFormat]int
 	offsets  map[VertexFormat]int
-	verts    []float32
+	verts    []uint8
 	idxs     []uint16
 	nextidx  uint16
 }
@@ -385,7 +441,7 @@ type GeometryBuilder struct {
 func BuildGeometry(vf VertexFormat) *GeometryBuilder {
 	return &GeometryBuilder{
 		vf:       vf,
-		stride:   vf.Stride() / 4,
+		stride:   vf.Stride(),
 		lastdata: make(map[VertexFormat]int, vf.Count()),
 	}
 }
@@ -411,7 +467,7 @@ func (g *GeometryBuilder) offset(v VertexFormat) int {
 		for i := VertexFormat(1); i <= MaxVertexFormat; i <<= 1 {
 			if g.vf&i != 0 {
 				g.offsets[i] = offs
-				offs += vertexBytes(i) / 4
+				offs += attribBytes(i)
 			}
 		}
 	}
@@ -423,55 +479,80 @@ func (g *GeometryBuilder) next() {
 		g.cur += g.stride
 	}
 	g.curvf = 0
-	zeros := make([]float32, g.stride)
+	zeros := make([]uint8, g.stride)
 	g.verts = append(g.verts, zeros...)
 }
 
 // fillVertex fills the rest of the vertex data using the last set data
 // from a previous vertex
 func (g *GeometryBuilder) fillVertex() {
-	for i := VertexFormat(1); i <= MaxVertexFormat; i <<= 1 {
-		if g.vf&i != 0 && g.curvf&i == 0 {
-			offs, ok := g.lastdata[i]
-			if ok {
-				data := g.verts[offs : offs+vertexBytes(i)/4]
-				g.set(i, data)
+	/*
+		for i := VertexFormat(1); i <= MaxVertexFormat; i <<= 1 {
+			if g.vf&i != 0 && g.curvf&i == 0 {
+				offs, ok := g.lastdata[i]
+				if ok {
+					data := g.verts[offs : offs+attribBytes(i)/4]
+					g.set(i, data)
+				}
 			}
+		}
+	*/
+	for i, offs := range g.lastdata {
+		if g.vf&i != 0 && g.curvf&i == 0 {
+			data := g.verts[offs : offs+attribBytes(i)]
+			g.set(i, data)
 		}
 	}
 }
 
-func (g *GeometryBuilder) set(v VertexFormat, data []float32) {
+func (g *GeometryBuilder) set(v VertexFormat, data []uint8) {
 	g.curvf |= v
 	offs := g.cur + g.offset(v)
 	g.lastdata[v] = offs
 	copy(g.verts[offs:offs+len(data)], data)
 }
 
+func (g *GeometryBuilder) setf(v VertexFormat, data []float32) {
+	sz := len(data) * 4
+	slicehdr := reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&data[0])),
+		Len:  sz,
+		Cap:  sz,
+	}
+	slice := *(*[]uint8)(unsafe.Pointer(&slicehdr))
+	g.set(v, slice)
+}
+
 // Position creates a new vertex and sets the vertex position.
-// TODO: set unset data for previous vertex to the last data the user provided
 func (g *GeometryBuilder) Position(x, y, z float32) *GeometryBuilder {
 	g.fillVertex()
 	g.next()
-	g.set(VertexPosition, []float32{x, y, z})
+	g.setf(VertexPosition, []float32{x, y, z})
 	return g
 }
 
 // Color sets the vertex color.
-func (gb *GeometryBuilder) Color(r, g, b float32) *GeometryBuilder {
-	gb.set(VertexColor, []float32{r, g, b})
+func (gb *GeometryBuilder) Color(r, g, b, a uint8) *GeometryBuilder {
+	gb.set(VertexColor, []uint8{r, g, b, a})
+	return gb
+}
+
+func (gb *GeometryBuilder) Colorf(r, g, b, a float32) *GeometryBuilder {
+	gb.set(VertexColor, []uint8{
+		uint8(r * 255.0), uint8(g * 255.0), uint8(b * 255.0), uint8(a * 255.0),
+	})
 	return gb
 }
 
 // Normal sets the vertex normal.
 func (g *GeometryBuilder) Normal(x, y, z float32) *GeometryBuilder {
-	g.set(VertexNormal, []float32{x, y, z})
+	g.setf(VertexNormal, []float32{x, y, z})
 	return g
 }
 
 // Texcoord sets the vertex texture coordinate.
 func (g *GeometryBuilder) Texcoord(u, v float32) *GeometryBuilder {
-	g.set(VertexTexcoord, []float32{u, v})
+	g.setf(VertexTexcoord, []float32{u, v})
 	return g
 }
 
@@ -528,8 +609,8 @@ func (g *GeometryBuilder) VertexCount() int {
 	return len(g.verts) / g.stride
 }
 
-// CopyVertices copies the vertices directly into buf. If len(buf) does not equal VertexCount()*(VertexFormat().Stride()/4), an error is returned.
-func (g *GeometryBuilder) CopyVertices(buf []float32) error {
+// CopyVertices copies the vertices directly into buf. If len(buf) does not equal VertexCount()*VertexFormat.Stride(), an error is returned.
+func (g *GeometryBuilder) CopyVertices(buf []byte) error {
 	g.fillVertex()
 	// TODO: check len
 	copy(buf, g.verts)

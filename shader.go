@@ -167,11 +167,10 @@ func (s *Shader) LayoutGeometry(geom Geometry) *GeometryLayout {
 		}
 		attrib = s.prog.GetAttribLocation(name)
 		if attrib >= 0 {
-			elems := uint(vertexBytes(i)) / 4
-			attrib.AttribPointer(elems, gl.FLOAT, false, stride, uintptr(offset))
+			attrib.AttribPointer(attribElems(i), attribType(i), attribNormalized(i), stride, uintptr(offset))
 			attrib.EnableArray()
 		}
-		offset += vertexBytes(i)
+		offset += attribBytes(i)
 	}
 
 	geom.Indices().bind()
