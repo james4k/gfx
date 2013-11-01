@@ -8,14 +8,14 @@ import (
 // TODO: we need to supprt image.Image ideally as a source, as well as
 // streaming sources for minimum copying..but that also requires
 // PIXEL_UNPACK_BUFFER
-type Sampler interface {
+type Sampler2D interface {
 	bind()
 }
 
 // Image takes an image and returns a 2D Sampler. Currently only takes
-// *image.NRGBA, *image.RGBA. No processing is done on the image data, such
-// as premultiplying alpha.
-func Image(img image.Image) (Sampler, error) {
+// *image.NRGBA, *image.RGBA, *image.Alpha, and *image.Gray. No processing is
+// done on the image data, such as premultiplying alpha or linearization.
+func Image(img image.Image) (Sampler2D, error) {
 	switch img.(type) {
 	case *image.NRGBA:
 		nrgba := img.(*image.NRGBA)
@@ -25,6 +25,14 @@ func Image(img image.Image) (Sampler, error) {
 		rgba := img.(*image.RGBA)
 		size := rgba.Rect.Size()
 		return imageRGBA(rgba.Pix, size.X, size.Y)
+	case *image.Alpha:
+		alpha := img.(*image.Alpha)
+		size := alpha.Rect.Size()
+		return imageAlpha(alpha.Pix, size.X, size.Y)
+	case *image.Gray:
+		gray := img.(*image.Gray)
+		size := gray.Rect.Size()
+		return imageAlpha(gray.Pix, size.X, size.Y)
 	default:
 		return nil, image.ErrFormat
 	}
@@ -39,7 +47,7 @@ func (t *texture2d) bind() {
 	t.tex.Bind(gl.TEXTURE_2D)
 }
 
-func imageRGBA(pix []byte, width, height int) (Sampler, error) {
+func imageRGBA(pix []byte, width, height int) (Sampler2D, error) {
 	// TODO: finalizer
 	t := &texture2d{
 		tex: gl.GenTexture(),
@@ -48,5 +56,17 @@ func imageRGBA(pix []byte, width, height int) (Sampler, error) {
 	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
 	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, pix)
+	return t, nil
+}
+
+func imageAlpha(pix []byte, width, height int) (Sampler2D, error) {
+	// TODO: finalizer
+	t := &texture2d{
+		tex: gl.GenTexture(),
+	}
+	t.bind()
+	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+	gl.TexParameterf(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, pix)
 	return t, nil
 }

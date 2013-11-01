@@ -119,9 +119,10 @@ func (s *Shader) SetUniforms(data interface{}) {
 			val := iface.([16]float32)
 			u.UniformMatrix4f(false, &val)
 		default:
-			sampler := iface.(Sampler)
+			sampler := iface.(Sampler2D)
 			if sampler != nil {
 				u := s.prog.GetUniformLocation(name)
+				// TODO: need to select texture unit
 				gl.ActiveTexture(gl.TEXTURE0)
 				sampler.bind()
 				u.Uniform1i(0)

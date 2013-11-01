@@ -348,6 +348,11 @@ func (g *geometry) CopyFrom(data GeometryData) error {
 	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, idxsize, nil, g.usage.gl())
 	if idxsize > 0 {
 		for stop := false; !stop; {
+			// TODO: gl package does not have MapBufferRange, but it may be
+			// beneficial to measure what kind of gains we can get from it.
+			// However, the BufferData call above should invalidate the buffer
+			// so the wins may not be much if any. GL_MAP_UNSYNCHRONIZED_BIT is
+			// probably where the wins would be at.
 			ptr := gl.MapBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.WRITE_ONLY)
 			slicehdr := reflect.SliceHeader{
 				Data: uintptr(ptr),
@@ -355,6 +360,7 @@ func (g *geometry) CopyFrom(data GeometryData) error {
 				Cap:  idxlen,
 			}
 			slice := *(*[]uint16)(unsafe.Pointer(&slicehdr))
+			// TODO: this is not a safe API at all
 			err := data.CopyIndices(slice)
 			stop = gl.UnmapBuffer(gl.ELEMENT_ARRAY_BUFFER)
 			if err != nil {
@@ -378,6 +384,7 @@ func (g *geometry) CopyFrom(data GeometryData) error {
 				Cap:  vertsize,
 			}
 			slice := *(*[]byte)(unsafe.Pointer(&slicehdr))
+			// TODO: this is not a safe API at all
 			err := data.CopyVertices(slice)
 			stop = gl.UnmapBuffer(gl.ARRAY_BUFFER)
 			if err != nil {
