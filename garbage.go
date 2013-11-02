@@ -12,8 +12,9 @@ type garbage struct {
 	buffers []gl.Buffer
 }
 
-// TODO: this needs to be thread-local!! might have to do this shit in C, or at
-// least a thread-local allocation.
+// TODO: This needs to be context-local (a GL context doesn't have to stay on
+// the same thread, and there can be multiples). So, we may need a
+// user-specified key which could be the OS window handle or something.
 var trashbin garbage
 
 func (g *garbage) addBuffer(b gl.Buffer) {
