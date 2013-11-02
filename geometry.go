@@ -339,9 +339,11 @@ func (g *geometry) CopyFrom(data GeometryData) error {
 		return errBadVertexFormat
 	}
 
-	// if unmap returns false, the buffer we wrote to is no longer valid
-	// and we need to try again. though, this is apparently uncommon in
-	// modern drivers.
+	// if unmap returns false, the buffer we wrote to is no longer valid and we
+	// need to try again. though, this is apparently uncommon in modern
+	// drivers. this means it is not feasible to compute/copy vertices directly
+	// into the mapped buffer. however, it would be nice to provide a
+	// failure-capable API to do this.
 	g.indices.bind()
 	idxlen := data.IndexCount()
 	idxsize := 2 * idxlen
