@@ -433,20 +433,20 @@ func StaticGeometry(indices []uint16, vertices []float32, format VertexFormat) G
 	return geom
 }
 
-type GeometryBuilder struct {
+type GeometryBuffer struct {
 	vf       VertexFormat
 	stride   int
 	cur      int
 	curvf    VertexFormat // data that's been set on the current vertex
 	lastdata map[VertexFormat]int
 	offsets  map[VertexFormat]int
-	verts    []uint8
+	verts    []byte
 	idxs     []uint16
 	nextidx  uint16
 }
 
-func BuildGeometry(vf VertexFormat) *GeometryBuilder {
-	return &GeometryBuilder{
+func NewGeometryBuffer(vf VertexFormat) *GeometryBuffer {
+	return &GeometryBuffer{
 		vf:       vf,
 		stride:   vf.Stride(),
 		lastdata: make(map[VertexFormat]int, vf.Count()),
@@ -454,7 +454,7 @@ func BuildGeometry(vf VertexFormat) *GeometryBuilder {
 }
 
 // Clear resets buffers to zero length.
-func (g *GeometryBuilder) Clear() {
+func (g *GeometryBuffer) Clear() {
 	g.lastdata = make(map[VertexFormat]int, len(g.lastdata))
 	g.cur = 0
 	g.curvf = 0
@@ -464,7 +464,7 @@ func (g *GeometryBuilder) Clear() {
 }
 
 // TODO: add a test
-func (g *GeometryBuilder) offset(v VertexFormat) int {
+func (g *GeometryBuffer) offset(v VertexFormat) int {
 	if g.vf&v == 0 {
 		panic(errBadVertexFormat)
 	}
@@ -481,7 +481,7 @@ func (g *GeometryBuilder) offset(v VertexFormat) int {
 	return g.offsets[v]
 }
 
-func (g *GeometryBuilder) next() {
+func (g *GeometryBuffer) next() {
 	if len(g.verts) != 0 {
 		g.cur += g.stride
 	}
@@ -492,7 +492,7 @@ func (g *GeometryBuilder) next() {
 
 // fillVertex fills the rest of the vertex data using the last set data
 // from a previous vertex
-func (g *GeometryBuilder) fillVertex() {
+func (g *GeometryBuffer) fillVertex() {
 	/*
 		for i := VertexFormat(1); i <= MaxVertexFormat; i <<= 1 {
 			if g.vf&i != 0 && g.curvf&i == 0 {
@@ -512,14 +512,14 @@ func (g *GeometryBuilder) fillVertex() {
 	}
 }
 
-func (g *GeometryBuilder) set(v VertexFormat, data []uint8) {
+func (g *GeometryBuffer) set(v VertexFormat, data []uint8) {
 	g.curvf |= v
 	offs := g.cur + g.offset(v)
 	g.lastdata[v] = offs
 	copy(g.verts[offs:offs+len(data)], data)
 }
 
-func (g *GeometryBuilder) setf(v VertexFormat, data []float32) {
+func (g *GeometryBuffer) setf(v VertexFormat, data []float32) {
 	sz := len(data) * 4
 	slicehdr := reflect.SliceHeader{
 		Data: uintptr(unsafe.Pointer(&data[0])),
@@ -531,7 +531,7 @@ func (g *GeometryBuilder) setf(v VertexFormat, data []float32) {
 }
 
 // Position creates a new vertex and sets the vertex position.
-func (g *GeometryBuilder) Position(x, y, z float32) *GeometryBuilder {
+func (g *GeometryBuffer) Position(x, y, z float32) *GeometryBuffer {
 	g.fillVertex()
 	g.next()
 	g.setf(VertexPosition, []float32{x, y, z})
@@ -539,12 +539,12 @@ func (g *GeometryBuilder) Position(x, y, z float32) *GeometryBuilder {
 }
 
 // Color sets the vertex color.
-func (gb *GeometryBuilder) Color(r, g, b, a uint8) *GeometryBuilder {
+func (gb *GeometryBuffer) Color(r, g, b, a uint8) *GeometryBuffer {
 	gb.set(VertexColor, []uint8{r, g, b, a})
 	return gb
 }
 
-func (gb *GeometryBuilder) Colorf(r, g, b, a float32) *GeometryBuilder {
+func (gb *GeometryBuffer) Colorf(r, g, b, a float32) *GeometryBuffer {
 	gb.set(VertexColor, []uint8{
 		uint8(r * 255.0), uint8(g * 255.0), uint8(b * 255.0), uint8(a * 255.0),
 	})
@@ -552,19 +552,19 @@ func (gb *GeometryBuilder) Colorf(r, g, b, a float32) *GeometryBuilder {
 }
 
 // Normal sets the vertex normal.
-func (g *GeometryBuilder) Normal(x, y, z float32) *GeometryBuilder {
+func (g *GeometryBuffer) Normal(x, y, z float32) *GeometryBuffer {
 	g.setf(VertexNormal, []float32{x, y, z})
 	return g
 }
 
 // Texcoord sets the vertex texture coordinate.
-func (g *GeometryBuilder) Texcoord(u, v float32) *GeometryBuilder {
+func (g *GeometryBuffer) Texcoord(u, v float32) *GeometryBuffer {
 	g.setf(VertexTexcoord, []float32{u, v})
 	return g
 }
 
 // Indices appends new indices to the buffer that are relative to the maximum index in the buffer.
-func (g *GeometryBuilder) Indices(idxs ...uint16) *GeometryBuilder {
+func (g *GeometryBuffer) Indices(idxs ...uint16) *GeometryBuffer {
 	// TODO: could really use a test
 	newnext := g.nextidx
 	for i, idx := range idxs {
@@ -579,18 +579,18 @@ func (g *GeometryBuilder) Indices(idxs ...uint16) *GeometryBuilder {
 	return g
 }
 
-func (g *GeometryBuilder) SetIndices(idxs ...uint16) {
+func (g *GeometryBuffer) SetIndices(idxs ...uint16) {
 	g.nextidx = 0
 	g.idxs = make([]uint16, len(idxs))
 	copy(g.idxs, idxs)
 }
 
-func (g *GeometryBuilder) VertexFormat() VertexFormat {
+func (g *GeometryBuffer) VertexFormat() VertexFormat {
 	return g.vf
 }
 
 // IndexCount returns the number of indices available.
-func (g *GeometryBuilder) IndexCount() int {
+func (g *GeometryBuffer) IndexCount() int {
 	if g.idxs == nil {
 		return g.VertexCount()
 	}
@@ -599,7 +599,7 @@ func (g *GeometryBuilder) IndexCount() int {
 
 // CopyIndices copies the indices directly into buf. If IndexCount() does not
 // match len(buf), an error is returned.
-func (g *GeometryBuilder) CopyIndices(buf []uint16) error {
+func (g *GeometryBuffer) CopyIndices(buf []uint16) error {
 	if g.idxs != nil {
 		// TODO: check len
 		copy(buf, g.idxs)
@@ -612,17 +612,14 @@ func (g *GeometryBuilder) CopyIndices(buf []uint16) error {
 }
 
 // VertexCount returns the number of vertices available.
-func (g *GeometryBuilder) VertexCount() int {
+func (g *GeometryBuffer) VertexCount() int {
 	return len(g.verts) / g.stride
 }
 
 // CopyVertices copies the vertices directly into buf. If len(buf) does not equal VertexCount()*VertexFormat.Stride(), an error is returned.
-func (g *GeometryBuilder) CopyVertices(buf []byte) error {
+func (g *GeometryBuffer) CopyVertices(buf []byte) error {
 	g.fillVertex()
 	// TODO: check len
 	copy(buf, g.verts)
 	return nil
 }
-
-//func BuildGeometry(format VertexFormat) *GeometryBuilder {
-//}
