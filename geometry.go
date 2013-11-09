@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/go-gl/gl"
 	"reflect"
-	"runtime"
 	"unsafe"
 )
 
@@ -195,207 +194,211 @@ func (v VertexAttributes) clone() VertexAttributes {
 	return v2
 }
 
-type IndexBuffer interface {
-	bind()
-	Slice(int, int) IndexBuffer
-	Offset() int
-	Count() int
+var errBadVertexFormat = errors.New("gfx: bad vertex format")
+var errMapBufferFailed = errors.New("gfx: mapbuffer failed")
+
+// VertexBuffer represents interleaved vertices for a VertexFormat set.
+type VertexBuffer struct {
+	buf    gl.Buffer
+	count  int
+	format VertexFormat
 }
 
-type indexBuf struct {
-	buf           gl.Buffer
-	offset, count int
+func (b VertexBuffer) bind() {
+	b.buf.Bind(gl.ARRAY_BUFFER)
 }
 
-func (b *indexBuf) bind() {
+func (b VertexBuffer) Release() {
+	b.buf.Delete()
+}
+
+func (b VertexBuffer) Count() int {
+	return b.count
+}
+
+func (b VertexBuffer) Format() VertexFormat {
+	return b.format
+}
+
+func (b *VertexBuffer) SetVertices(src []byte, usage Usage, vf VertexFormat) error {
+	if b.Format() != vf {
+		return errBadVertexFormat
+	}
+	gl.VertexArray(0).Bind()
+	b.bind()
+	// set size of buffer and invalidate it
+	gl.BufferData(gl.ARRAY_BUFFER, len(src), nil, usage.gl())
+	if len(src) > 0 {
+		// if unmap returns false, the buffer we wrote to is no longer valid and we
+		// need to try again. though, this is apparently uncommon in modern
+		// drivers. this means it is not feasible to compute/copy vertices directly
+		// into the mapped buffer. however, it would be nice to provide a
+		// failure-capable API to do this.
+		const maxretries = 5
+		retries := 0
+		for ; retries < maxretries; retries++ {
+			ptr := gl.MapBuffer(gl.ARRAY_BUFFER, gl.WRITE_ONLY)
+			slicehdr := reflect.SliceHeader{
+				Data: uintptr(ptr),
+				Len:  len(src),
+				Cap:  len(src),
+			}
+			dest := *(*[]byte)(unsafe.Pointer(&slicehdr))
+			copy(dest, src)
+			if gl.UnmapBuffer(gl.ARRAY_BUFFER) {
+				break
+			}
+		}
+		if retries == maxretries {
+			return errMapBufferFailed
+		}
+	}
+	b.count = len(src) / vf.Stride()
+	return nil
+}
+
+type IndexBuffer struct {
+	buf gl.Buffer
+	//offset int
+	count int
+}
+
+func (b IndexBuffer) bind() {
 	b.buf.Bind(gl.ELEMENT_ARRAY_BUFFER)
 }
 
-func (b *indexBuf) release() {
-	trashbin.addBuffer(b.buf)
+func (b IndexBuffer) Release() {
+	b.buf.Delete()
 }
 
-func (b *indexBuf) Slice(i, j int) IndexBuffer {
+/*
+func (b IndexBuffer) Slice(i, j int) IndexBuffer {
 	if j < i || i < 0 || j < 0 || i >= b.count || j > b.count {
-		panic("IndexBuffer Slice bounds out of range")
+		panic("IndexBuffer.Slice bounds out of range")
 	}
-	return &indexBuf{
+	return IndexBuffer{
 		buf:    b.buf,
 		offset: b.offset + i,
 		count:  j - i,
 	}
 }
 
-func (i *indexBuf) Offset() int {
-	return i.offset
+func (b IndexBuffer) Offset() int {
+	return b.offset
 }
+*/
 
-func (i *indexBuf) Count() int {
-	return i.count
-}
-
-// VertexBuffer represents interleaved vertices for a VertexFormat set.
-type VertexBuffer interface {
-	bind()
-	Count() int
-	Format() VertexFormat
-}
-
-type vertexBuf struct {
-	buf    gl.Buffer
-	count  int
-	format VertexFormat
-}
-
-func (b *vertexBuf) bind() {
-	b.buf.Bind(gl.ARRAY_BUFFER)
-}
-
-func (b *vertexBuf) release() {
-	trashbin.addBuffer(b.buf)
-}
-
-func (b *vertexBuf) Count() int {
+func (b IndexBuffer) Count() int {
 	return b.count
 }
 
-func (b *vertexBuf) Format() VertexFormat {
-	return b.format
+func (b *IndexBuffer) SetIndices(src []uint16, usage Usage) error {
+	gl.VertexArray(0).Bind()
+	b.bind()
+	idxsize := 2 * len(src)
+	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, idxsize, nil, usage.gl())
+	if idxsize > 0 {
+		const maxretries = 5
+		retries := 0
+		for ; retries < maxretries; retries++ {
+			ptr := gl.MapBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.WRITE_ONLY)
+			slicehdr := reflect.SliceHeader{
+				Data: uintptr(ptr),
+				Len:  len(src),
+				Cap:  len(src),
+			}
+			dest := *(*[]uint16)(unsafe.Pointer(&slicehdr))
+			copy(dest, src)
+			if gl.UnmapBuffer(gl.ELEMENT_ARRAY_BUFFER) {
+				break
+			}
+		}
+		if retries == maxretries {
+			return errMapBufferFailed
+		}
+	}
+	//b.offset = 0
+	b.count = len(src)
+	return nil
 }
 
-// Geometry represents a piece of mesh that can be rendered in a single draw
-// call.
-type Geometry interface {
-	Indices() IndexBuffer
-	Vertices() VertexBuffer
-	CopyFrom(GeometryData) error
+// TODO: 32-bit indices...maybe need another type altogether
+func (b *IndexBuffer) SetIndices32(p []uint32) error {
+	panic("NO.")
 }
 
-type IndexBufferData interface {
-	IndexCount() int
-	CopyIndices(buf []uint16) error
-}
-
-type VertexBufferData interface {
+type VertexData interface {
 	VertexCount() int
 	VertexFormat() VertexFormat
-	CopyVertices(buf []byte) error
+	CopyVertices(dest *VertexBuffer, usage Usage) error
 }
 
-type GeometryData interface {
-	IndexBufferData
-	VertexBufferData
+type IndexData interface {
+	IndexCount() int
+	CopyIndices(dest *IndexBuffer, usage Usage) error
 }
 
-type geometry struct {
-	indices     *indexBuf
-	vertices    *vertexBuf
-	usage       Usage
-	vertexArray gl.VertexArray
+// Geometry represents a piece of mesh that can be rendered in a single
+// draw call. It may or may not contain an index buffer, but always has
+// a vertex buffer.
+type Geometry struct {
+	usage Usage
+	VertexBuffer
+	IndexBuffer
 }
 
-func (g *geometry) Indices() IndexBuffer {
-	return g.indices
-}
-
-func (g *geometry) Vertices() VertexBuffer {
-	return g.vertices
-}
-
-func NewGeometry(data GeometryData, usage Usage) (Geometry, error) {
-	geom := initGeom(usage)
-	geom.vertices.format = data.VertexFormat()
-	err := geom.CopyFrom(data)
+// NewGeometry copies vertices from src as well as indices if IndexData
+// is implemented, into newly allocated buffer objects.
+func NewGeometry(src VertexData, usage Usage) (*Geometry, error) {
+	srcidx, ok := src.(IndexData)
+	geom := allocGeom(usage, ok)
+	geom.VertexBuffer.format = src.VertexFormat()
+	err := src.CopyVertices(&geom.VertexBuffer, usage)
 	if err != nil {
 		return nil, err
+	}
+	if ok {
+		err := srcidx.CopyIndices(&geom.IndexBuffer, usage)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return geom, nil
 }
 
-func initGeom(usage Usage) *geometry {
-	var bufs [2]gl.Buffer
-	gl.GenBuffers(bufs[:])
-	geom := &geometry{
-		indices: &indexBuf{
-			buf: bufs[0],
-		},
-		vertices: &vertexBuf{
-			buf: bufs[1],
-		},
-		usage:       usage,
-		vertexArray: gl.GenVertexArray(),
+func allocGeom(usage Usage, hasIndex bool) *Geometry {
+	geom := &Geometry{
+		usage: usage,
 	}
-	runtime.SetFinalizer(geom.indices, (*indexBuf).release)
-	runtime.SetFinalizer(geom.vertices, (*vertexBuf).release)
-	// TODO: finalizer for geom; need to remove VAO
+	if hasIndex {
+		var bufs [2]gl.Buffer
+		gl.GenBuffers(bufs[:])
+		geom.VertexBuffer.buf = bufs[0]
+		geom.IndexBuffer.buf = bufs[1]
+	} else {
+		geom.VertexBuffer.buf = gl.GenBuffer()
+	}
 	return geom
 }
 
-var errBadVertexFormat = errors.New("gfx: bad vertex format")
+func (g Geometry) Release() {
+	g.VertexBuffer.Release()
+	g.IndexBuffer.Release()
+}
 
-func (g *geometry) CopyFrom(data GeometryData) error {
-	vf := data.VertexFormat()
-	if g.vertices.Format() != vf {
-		return errBadVertexFormat
+// CopyFrom copies vertices from src as well as indices if IndexData
+// is implemented.
+func (g *Geometry) CopyFrom(src VertexData) error {
+	err := src.CopyVertices(&g.VertexBuffer, g.usage)
+	if err != nil {
+		return err
 	}
-
-	// if unmap returns false, the buffer we wrote to is no longer valid and we
-	// need to try again. though, this is apparently uncommon in modern
-	// drivers. this means it is not feasible to compute/copy vertices directly
-	// into the mapped buffer. however, it would be nice to provide a
-	// failure-capable API to do this.
-	g.indices.bind()
-	idxlen := data.IndexCount()
-	idxsize := 2 * idxlen
-	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, idxsize, nil, g.usage.gl())
-	if idxsize > 0 {
-		for stop := false; !stop; {
-			// TODO: gl package does not have MapBufferRange, but it may be
-			// beneficial to measure what kind of gains we can get from it.
-			// However, the BufferData call above should invalidate the buffer
-			// so the wins may not be much if any. GL_MAP_UNSYNCHRONIZED_BIT is
-			// probably where the wins would be at.
-			ptr := gl.MapBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.WRITE_ONLY)
-			slicehdr := reflect.SliceHeader{
-				Data: uintptr(ptr),
-				Len:  idxlen,
-				Cap:  idxlen,
-			}
-			slice := *(*[]uint16)(unsafe.Pointer(&slicehdr))
-			// TODO: this is not a safe API at all
-			err := data.CopyIndices(slice)
-			stop = gl.UnmapBuffer(gl.ELEMENT_ARRAY_BUFFER)
-			if err != nil {
-				return err
-			}
+	if srcidx, ok := src.(IndexData); ok {
+		err := srcidx.CopyIndices(&g.IndexBuffer, g.usage)
+		if err != nil {
+			return err
 		}
 	}
-	g.indices.offset = 0
-	g.indices.count = idxlen
-
-	g.vertices.bind()
-	vertlen := data.VertexCount()
-	vertsize := vf.Stride() * vertlen
-	gl.BufferData(gl.ARRAY_BUFFER, vertsize, nil, g.usage.gl())
-	if vertsize > 0 {
-		for stop := false; !stop; {
-			ptr := gl.MapBuffer(gl.ARRAY_BUFFER, gl.WRITE_ONLY)
-			slicehdr := reflect.SliceHeader{
-				Data: uintptr(ptr),
-				Len:  vertsize,
-				Cap:  vertsize,
-			}
-			slice := *(*[]byte)(unsafe.Pointer(&slicehdr))
-			// TODO: this is not a safe API at all
-			err := data.CopyVertices(slice)
-			stop = gl.UnmapBuffer(gl.ARRAY_BUFFER)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	g.vertices.count = vertlen
-
 	return nil
 }
 
@@ -403,12 +406,15 @@ func (g *geometry) CopyFrom(data GeometryData) error {
 // GPU and returns the representing Geometry. Panics if vertices length does
 // not fit the format specified. There should be 3 float32's for every vertex
 // channel. It is assumed the vertex data is interleaved.
+/*
 func StaticGeometry(indices []uint16, vertices []float32, format VertexFormat) Geometry {
 	// TODO: sanity check on vertices length based on VertexFormat?
 	stride := format.Stride()
 	if len(vertices)*4%stride != 0 {
 		panic("gfx: vertex count does not fit vertex format")
 	}
+
+	geom := initGeom(StaticDraw)
 
 	var bufs [2]gl.Buffer
 	gl.GenBuffers(bufs[:])
@@ -419,21 +425,9 @@ func StaticGeometry(indices []uint16, vertices []float32, format VertexFormat) G
 	size = len(vertices) * int(unsafe.Sizeof(vertices[0]))
 	gl.BufferData(gl.ARRAY_BUFFER, size, &vertices[0], gl.STATIC_DRAW)
 
-	geom := &geometry{
-		indices: &indexBuf{
-			buf:   bufs[0],
-			count: len(indices),
-		},
-		vertices: &vertexBuf{
-			buf:    bufs[1],
-			count:  (len(vertices) * 4) / stride,
-			format: format,
-		},
-	}
-	runtime.SetFinalizer(geom.indices, (*indexBuf).release)
-	runtime.SetFinalizer(geom.vertices, (*vertexBuf).release)
 	return geom
 }
+*/
 
 type GeometryBuffer struct {
 	vf       VertexFormat
@@ -599,18 +593,11 @@ func (g *GeometryBuffer) IndexCount() int {
 	return len(g.idxs)
 }
 
-// CopyIndices copies the indices directly into buf. If IndexCount() does not
+// CopyIndices copies the indices to dest. If IndexCount() does not
 // match len(buf), an error is returned.
-func (g *GeometryBuffer) CopyIndices(buf []uint16) error {
-	if g.idxs != nil {
-		// TODO: check len
-		copy(buf, g.idxs)
-		return nil
-	}
-	for i := range buf {
-		buf[i] = uint16(i)
-	}
-	return nil
+func (g *GeometryBuffer) CopyIndices(dest *IndexBuffer, usage Usage) error {
+	// TODO: sanity check on len, as described in doc
+	return dest.SetIndices(g.idxs, usage)
 }
 
 // VertexCount returns the number of vertices available.
@@ -618,10 +605,10 @@ func (g *GeometryBuffer) VertexCount() int {
 	return len(g.verts) / g.stride
 }
 
-// CopyVertices copies the vertices directly into buf. If len(buf) does not equal VertexCount()*VertexFormat.Stride(), an error is returned.
-func (g *GeometryBuffer) CopyVertices(buf []byte) error {
+// CopyVertices copies the vertices to dest. If len(buf) does not equal
+// VertexCount()*VertexFormat.Stride(), an error is returned.
+func (g *GeometryBuffer) CopyVertices(dest *VertexBuffer, usage Usage) error {
+	// TODO: sanity check on len, as described in doc
 	g.fillVertex()
-	// TODO: check len
-	copy(buf, g.verts)
-	return nil
+	return dest.SetVertices(g.verts, usage, g.VertexFormat())
 }

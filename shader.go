@@ -78,9 +78,6 @@ func (s *Shader) VertexFormat() VertexFormat {
 
 // Use puts the shader as the active program to bind data to and execute.
 func (s *Shader) Use() {
-	// checkpoint here for releasing unused GL resources
-	releaseGarbage()
-
 	s.prog.Use()
 }
 
@@ -133,20 +130,17 @@ func (s *Shader) SetUniforms(data interface{}) {
 
 type GeometryLayout struct {
 	vao    gl.VertexArray
-	geom   Geometry
+	idxbuf *IndexBuffer
 	shader *Shader
-}
-
-func (g *GeometryLayout) Geometry() Geometry {
-	return g.geom
 }
 
 // LayoutGeometry builds a vertex array object holding vertex attribute locations and
 // buffer pointers for the given geometry.
-func (s *Shader) LayoutGeometry(geom Geometry) *GeometryLayout {
-	vertices := geom.Vertices()
+func (s *Shader) LayoutGeometry(geom *Geometry) *GeometryLayout {
+	vertices := geom.VertexBuffer
 	if s.vertexFormat != vertices.Format() {
 		// TODO: really need to return an error; mainly for vertex format
+		panic("moo")
 	}
 	vao := gl.GenVertexArray()
 	vao.Bind()
@@ -174,16 +168,18 @@ func (s *Shader) LayoutGeometry(geom Geometry) *GeometryLayout {
 		offset += attribBytes(i)
 	}
 
-	geom.Indices().bind()
-	gl.VertexArray(0).Bind()
+	geom.IndexBuffer.bind()
 
 	layout := &GeometryLayout{
 		vao:    vao,
-		geom:   geom,
+		idxbuf: &geom.IndexBuffer,
 		shader: s,
 	}
-	// TODO: finalizer to delete VAO
 	return layout
+}
+
+func (g *GeometryLayout) Release() {
+	g.vao.Delete()
 }
 
 // SetGeometryLayout binds the underlying vertex array object that holds the buffer pointers.
@@ -192,9 +188,8 @@ func (s *Shader) SetGeometryLayout(layout *GeometryLayout) error {
 	if layout.shader != s {
 		return errors.New("gfx: geometry layout not compatible with this shader")
 	}
-	indices := layout.Geometry().Indices()
-	s.indexCount = indices.Count()
-	s.indexOffset = indices.Offset()
+	s.indexCount = layout.idxbuf.Count()
+	//s.indexOffset = indices.Offset()
 	layout.vao.Bind()
 	return nil
 }
@@ -207,5 +202,4 @@ func (s *Shader) SetGeometryLayout(layout *GeometryLayout) error {
 // SetInstances method? Hmmz
 func (s *Shader) Draw() {
 	gl.DrawElements(gl.TRIANGLES, s.indexCount, gl.UNSIGNED_SHORT, uintptr(s.indexOffset))
-	gl.VertexArray(0).Bind()
 }
