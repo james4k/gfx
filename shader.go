@@ -72,6 +72,10 @@ func BuildShader(attrs VertexAttributes, srcs ...ShaderSource) *Shader {
 	return shader
 }
 
+func (s *Shader) Release() {
+	s.prog.Delete()
+}
+
 func (s *Shader) VertexFormat() VertexFormat {
 	return s.vertexFormat
 }
