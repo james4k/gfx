@@ -1,5 +1,5 @@
 /*
-Package gfx provides a few simple abstractions over OpenGL shaders and
+Package gfx provides simple abstractions over OpenGL shaders and
 triangle-based geometry.
 */
 package gfx

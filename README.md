@@ -1,6 +1,6 @@
 # gfx
 
-Package gfx provides a few simple abstractions over OpenGL shaders and
+Package gfx provides simple abstractions over OpenGL shaders and
 triangle-based geometry.
 
 Read the [docs](http://godoc.org/j4k.co/gfx).
