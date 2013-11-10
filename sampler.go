@@ -15,7 +15,7 @@ type Sampler2D struct {
 // Image takes an image and returns a 2D Sampler. Currently only takes
 // *image.NRGBA, *image.RGBA, *image.Alpha, and *image.Gray. No processing is
 // done on the image data, such as premultiplying alpha or linearization.
-func Image(img image.Image) (Sampler2D, error) {
+func Image(img image.Image) (*Sampler2D, error) {
 	switch img.(type) {
 	case *image.NRGBA:
 		nrgba := img.(*image.NRGBA)
@@ -34,18 +34,22 @@ func Image(img image.Image) (Sampler2D, error) {
 		size := gray.Rect.Size()
 		return imageAlpha(gray.Pix, size.X, size.Y)
 	default:
-		return Sampler2D{}, image.ErrFormat
+		return nil, image.ErrFormat
 	}
 	panic("unreachable")
+}
+
+func (s *Sampler2D) Release() {
+	s.tex.Delete()
 }
 
 func (s *Sampler2D) bind() {
 	s.tex.Bind(gl.TEXTURE_2D)
 }
 
-func imageRGBA(pix []byte, width, height int) (Sampler2D, error) {
+func imageRGBA(pix []byte, width, height int) (*Sampler2D, error) {
 	// TODO: finalizer
-	s := Sampler2D{
+	s := &Sampler2D{
 		tex: gl.GenTexture(),
 	}
 	s.bind()
@@ -55,9 +59,9 @@ func imageRGBA(pix []byte, width, height int) (Sampler2D, error) {
 	return s, nil
 }
 
-func imageAlpha(pix []byte, width, height int) (Sampler2D, error) {
+func imageAlpha(pix []byte, width, height int) (*Sampler2D, error) {
 	// TODO: finalizer
-	s := Sampler2D{
+	s := &Sampler2D{
 		tex: gl.GenTexture(),
 	}
 	s.bind()
