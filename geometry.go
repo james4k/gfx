@@ -66,8 +66,8 @@ const (
 
 // TODO: we need to convert the following 4 funcs into a table or something
 
-// attribBytes gives the byte size of a specific piece of vertex data
-func attribBytes(v VertexFormat) int {
+// AttribBytes gives the byte size of a specific piece of vertex data
+func (v VertexFormat) AttribBytes() int {
 	const fsize = 4
 	switch v {
 	case VertexColor,
@@ -95,7 +95,7 @@ func attribBytes(v VertexFormat) int {
 }
 
 // attribType gives the GL type of a specific piece of vertex data
-func attribType(v VertexFormat) gl.GLenum {
+func (v VertexFormat) attribType() gl.GLenum {
 	switch v {
 	case VertexColor,
 		VertexColor1:
@@ -107,7 +107,7 @@ func attribType(v VertexFormat) gl.GLenum {
 }
 
 // attribNormalized specifies integral value to be normalized to [0.0-1.0] for unsigned, yata yata.
-func attribNormalized(v VertexFormat) bool {
+func (v VertexFormat) attribNormalized() bool {
 	switch v {
 	case VertexColor,
 		VertexColor1:
@@ -119,7 +119,7 @@ func attribNormalized(v VertexFormat) bool {
 }
 
 // attribElems gives the number of elements for a specific piece of vertex data
-func attribElems(v VertexFormat) uint {
+func (v VertexFormat) attribElems() uint {
 	switch v {
 	case VertexColor,
 		VertexColor1:
@@ -152,7 +152,7 @@ func (v VertexFormat) Stride() int {
 	stride := 0
 	for i = 1; i <= MaxVertexFormat; i <<= 1 {
 		if v&i != 0 {
-			stride += attribBytes(i)
+			stride += i.AttribBytes()
 		}
 	}
 	return stride
@@ -194,7 +194,7 @@ func (v VertexAttributes) clone() VertexAttributes {
 	return v2
 }
 
-var errBadVertexFormat = errors.New("gfx: bad vertex format")
+var ErrBadVertexFormat = errors.New("gfx: bad vertex format")
 var errMapBufferFailed = errors.New("gfx: mapbuffer failed")
 
 // VertexBuffer represents interleaved vertices for a VertexFormat set.
@@ -204,26 +204,23 @@ type VertexBuffer struct {
 	format VertexFormat
 }
 
-func (b VertexBuffer) bind() {
+func (b *VertexBuffer) bind() {
 	b.buf.Bind(gl.ARRAY_BUFFER)
 }
 
-func (b VertexBuffer) Release() {
+func (b *VertexBuffer) Release() {
 	b.buf.Delete()
 }
 
-func (b VertexBuffer) Count() int {
+func (b *VertexBuffer) Count() int {
 	return b.count
 }
 
-func (b VertexBuffer) Format() VertexFormat {
+func (b *VertexBuffer) Format() VertexFormat {
 	return b.format
 }
 
-func (b *VertexBuffer) SetVertices(src []byte, usage Usage, vf VertexFormat) error {
-	if b.Format() != vf {
-		return errBadVertexFormat
-	}
+func (b *VertexBuffer) SetVertices(src []byte, usage Usage) error {
 	gl.VertexArray(0).Bind()
 	b.bind()
 	// set size of buffer and invalidate it
@@ -253,7 +250,7 @@ func (b *VertexBuffer) SetVertices(src []byte, usage Usage, vf VertexFormat) err
 			return errMapBufferFailed
 		}
 	}
-	b.count = len(src) / vf.Stride()
+	b.count = len(src) / b.format.Stride()
 	return nil
 }
 
@@ -263,16 +260,16 @@ type IndexBuffer struct {
 	count int
 }
 
-func (b IndexBuffer) bind() {
+func (b *IndexBuffer) bind() {
 	b.buf.Bind(gl.ELEMENT_ARRAY_BUFFER)
 }
 
-func (b IndexBuffer) Release() {
+func (b *IndexBuffer) Release() {
 	b.buf.Delete()
 }
 
 /*
-func (b IndexBuffer) Slice(i, j int) IndexBuffer {
+func (b *IndexBuffer) Slice(i, j int) IndexBuffer {
 	if j < i || i < 0 || j < 0 || i >= b.count || j > b.count {
 		panic("IndexBuffer.Slice bounds out of range")
 	}
@@ -283,12 +280,12 @@ func (b IndexBuffer) Slice(i, j int) IndexBuffer {
 	}
 }
 
-func (b IndexBuffer) Offset() int {
+func (b *IndexBuffer) Offset() int {
 	return b.offset
 }
 */
 
-func (b IndexBuffer) Count() int {
+func (b *IndexBuffer) Count() int {
 	return b.count
 }
 
@@ -323,9 +320,9 @@ func (b *IndexBuffer) SetIndices(src []uint16, usage Usage) error {
 }
 
 // TODO: 32-bit indices...maybe need another type altogether
-func (b *IndexBuffer) SetIndices32(p []uint32) error {
-	panic("NO.")
-}
+//func (b *IndexBuffer) SetIndices32(p []uint32) error {
+//panic("NO.")
+//}
 
 type VertexData interface {
 	VertexCount() int
@@ -381,7 +378,7 @@ func allocGeom(usage Usage, hasIndex bool) *Geometry {
 	return geom
 }
 
-func (g Geometry) Release() {
+func (g *Geometry) Release() {
 	g.VertexBuffer.Release()
 	g.IndexBuffer.Release()
 }
@@ -428,187 +425,3 @@ func StaticGeometry(indices []uint16, vertices []float32, format VertexFormat) G
 	return geom
 }
 */
-
-type GeometryBuffer struct {
-	vf       VertexFormat
-	stride   int
-	cur      int
-	curvf    VertexFormat // data that's been set on the current vertex
-	lastdata map[VertexFormat]int
-	offsets  map[VertexFormat]int
-	verts    []byte
-	idxs     []uint16
-	nextidx  uint16
-}
-
-func NewGeometryBuffer(vf VertexFormat) *GeometryBuffer {
-	return &GeometryBuffer{
-		vf:       vf,
-		stride:   vf.Stride(),
-		lastdata: make(map[VertexFormat]int, vf.Count()),
-	}
-}
-
-// Clear resets buffers to zero length.
-func (g *GeometryBuffer) Clear() {
-	g.lastdata = make(map[VertexFormat]int, len(g.lastdata))
-	g.cur = 0
-	g.curvf = 0
-	g.verts = g.verts[:0]
-	g.idxs = g.idxs[:0]
-	g.nextidx = 0
-}
-
-// TODO: add a test
-func (g *GeometryBuffer) offset(v VertexFormat) int {
-	if g.vf&v == 0 {
-		panic(errBadVertexFormat)
-	}
-	if g.offsets == nil {
-		offs := 0
-		g.offsets = map[VertexFormat]int{}
-		for i := VertexFormat(1); i <= MaxVertexFormat; i <<= 1 {
-			if g.vf&i != 0 {
-				g.offsets[i] = offs
-				offs += attribBytes(i)
-			}
-		}
-	}
-	return g.offsets[v]
-}
-
-func (g *GeometryBuffer) next() {
-	if len(g.verts) != 0 {
-		g.cur += g.stride
-	}
-	g.curvf = 0
-	zeros := make([]uint8, g.stride)
-	g.verts = append(g.verts, zeros...)
-}
-
-// fillVertex fills the rest of the vertex data using the last set data
-// from a previous vertex
-func (g *GeometryBuffer) fillVertex() {
-	/*
-		for i := VertexFormat(1); i <= MaxVertexFormat; i <<= 1 {
-			if g.vf&i != 0 && g.curvf&i == 0 {
-				offs, ok := g.lastdata[i]
-				if ok {
-					data := g.verts[offs : offs+attribBytes(i)/4]
-					g.set(i, data)
-				}
-			}
-		}
-	*/
-	for i, offs := range g.lastdata {
-		if g.vf&i != 0 && g.curvf&i == 0 {
-			data := g.verts[offs : offs+attribBytes(i)]
-			g.set(i, data)
-		}
-	}
-}
-
-func (g *GeometryBuffer) set(v VertexFormat, data []uint8) {
-	g.curvf |= v
-	offs := g.cur + g.offset(v)
-	g.lastdata[v] = offs
-	copy(g.verts[offs:offs+len(data)], data)
-}
-
-func (g *GeometryBuffer) setf(v VertexFormat, data []float32) {
-	sz := len(data) * 4
-	slicehdr := reflect.SliceHeader{
-		Data: uintptr(unsafe.Pointer(&data[0])),
-		Len:  sz,
-		Cap:  sz,
-	}
-	slice := *(*[]uint8)(unsafe.Pointer(&slicehdr))
-	g.set(v, slice)
-}
-
-// Position creates a new vertex and sets the vertex position.
-func (g *GeometryBuffer) Position(x, y, z float32) *GeometryBuffer {
-	g.fillVertex()
-	g.next()
-	g.setf(VertexPosition, []float32{x, y, z})
-	return g
-}
-
-// Color sets the vertex color.
-func (gb *GeometryBuffer) Color(r, g, b, a uint8) *GeometryBuffer {
-	gb.set(VertexColor, []uint8{r, g, b, a})
-	return gb
-}
-
-func (gb *GeometryBuffer) Colorf(r, g, b, a float32) *GeometryBuffer {
-	gb.set(VertexColor, []uint8{
-		uint8(r * 255.0), uint8(g * 255.0), uint8(b * 255.0), uint8(a * 255.0),
-	})
-	return gb
-}
-
-// Normal sets the vertex normal.
-func (g *GeometryBuffer) Normal(x, y, z float32) *GeometryBuffer {
-	g.setf(VertexNormal, []float32{x, y, z})
-	return g
-}
-
-// Texcoord sets the vertex texture coordinate.
-func (g *GeometryBuffer) Texcoord(u, v float32) *GeometryBuffer {
-	g.setf(VertexTexcoord, []float32{u, v})
-	return g
-}
-
-// Indices appends new indices to the buffer that are relative to the maximum index in the buffer.
-func (g *GeometryBuffer) Indices(idxs ...uint16) *GeometryBuffer {
-	// TODO: could really use a test
-	newnext := g.nextidx
-	for i, idx := range idxs {
-		idx += g.nextidx
-		if idx >= newnext {
-			newnext = idx + 1
-		}
-		idxs[i] = idx
-	}
-	g.nextidx = newnext
-	g.idxs = append(g.idxs, idxs...)
-	return g
-}
-
-func (g *GeometryBuffer) SetIndices(idxs ...uint16) {
-	g.nextidx = 0
-	g.idxs = make([]uint16, len(idxs))
-	copy(g.idxs, idxs)
-}
-
-func (g *GeometryBuffer) VertexFormat() VertexFormat {
-	return g.vf
-}
-
-// IndexCount returns the number of indices available.
-func (g *GeometryBuffer) IndexCount() int {
-	if g.idxs == nil {
-		return g.VertexCount()
-	}
-	return len(g.idxs)
-}
-
-// CopyIndices copies the indices to dest. If IndexCount() does not
-// match len(buf), an error is returned.
-func (g *GeometryBuffer) CopyIndices(dest *IndexBuffer, usage Usage) error {
-	// TODO: sanity check on len, as described in doc
-	return dest.SetIndices(g.idxs, usage)
-}
-
-// VertexCount returns the number of vertices available.
-func (g *GeometryBuffer) VertexCount() int {
-	return len(g.verts) / g.stride
-}
-
-// CopyVertices copies the vertices to dest. If len(buf) does not equal
-// VertexCount()*VertexFormat.Stride(), an error is returned.
-func (g *GeometryBuffer) CopyVertices(dest *VertexBuffer, usage Usage) error {
-	// TODO: sanity check on len, as described in doc
-	g.fillVertex()
-	return dest.SetVertices(g.verts, usage, g.VertexFormat())
-}

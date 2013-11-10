@@ -119,10 +119,10 @@ func (s *Shader) SetUniforms(data interface{}) {
 			u := s.prog.GetUniformLocation(name)
 			val := iface.([16]float32)
 			u.UniformMatrix4f(false, &val)
-		case Sampler2D:
+		case *Sampler2D:
 			u := s.prog.GetUniformLocation(name)
 			// TODO: need to select texture unit
-			sampler := iface.(Sampler2D)
+			sampler := iface.(*Sampler2D)
 			gl.ActiveTexture(gl.TEXTURE0)
 			sampler.bind()
 			u.Uniform1i(0)
@@ -138,7 +138,7 @@ type GeometryLayout struct {
 
 // LayoutGeometry builds a vertex array object holding vertex attribute locations and
 // buffer pointers for the given geometry.
-func (s *Shader) LayoutGeometry(geom *Geometry) *GeometryLayout {
+func LayoutGeometry(s *Shader, geom *Geometry) *GeometryLayout {
 	vertices := geom.VertexBuffer
 	if s.vertexFormat != vertices.Format() {
 		// TODO: really need to return an error; mainly for vertex format
@@ -164,10 +164,10 @@ func (s *Shader) LayoutGeometry(geom *Geometry) *GeometryLayout {
 		}
 		attrib = s.prog.GetAttribLocation(name)
 		if attrib >= 0 {
-			attrib.AttribPointer(attribElems(i), attribType(i), attribNormalized(i), stride, uintptr(offset))
+			attrib.AttribPointer(i.attribElems(), i.attribType(), i.attribNormalized(), stride, uintptr(offset))
 			attrib.EnableArray()
 		}
-		offset += attribBytes(i)
+		offset += i.AttribBytes()
 	}
 
 	geom.IndexBuffer.bind()
@@ -184,8 +184,8 @@ func (g *GeometryLayout) Release() {
 	g.vao.Delete()
 }
 
-// SetGeometryLayout binds the underlying vertex array object that holds the buffer pointers.
-func (s *Shader) SetGeometryLayout(layout *GeometryLayout) error {
+// SetGeometry binds the underlying vertex array object that holds the buffer pointers.
+func (s *Shader) SetGeometry(layout *GeometryLayout) error {
 	// TODO: come up with a more sophistcated layout compatibility check. abstract this away from the shader somehow.
 	if layout.shader != s {
 		return errors.New("gfx: geometry layout not compatible with this shader")

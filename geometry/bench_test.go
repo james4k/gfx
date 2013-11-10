@@ -1,13 +1,15 @@
-package gfx
+package geometry_test
 
 import (
+	"j4k.co/gfx"
+	"j4k.co/gfx/geometry"
 	"testing"
 )
 
 const builderQuads = 40 * 40
 
-func BenchmarkGeometryBufferTinyVerts(b *testing.B) {
-	bdr := NewGeometryBuffer(VertexPosition)
+func BenchmarkBuilderTinyVerts(b *testing.B) {
+	bdr := geometry.NewBuilder(gfx.VertexPosition)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for q := 0; q < builderQuads; q++ {
@@ -20,8 +22,9 @@ func BenchmarkGeometryBufferTinyVerts(b *testing.B) {
 	}
 }
 
-func BenchmarkGeometryBufferFatVerts(b *testing.B) {
-	bdr := NewGeometryBuffer(VertexPosition | VertexColor | VertexTexcoord)
+func BenchmarkBuilderFatVerts(b *testing.B) {
+	bdr := geometry.NewBuilder(gfx.VertexPosition | gfx.VertexColor |
+		gfx.VertexTexcoord)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for q := 0; q < builderQuads; q++ {
