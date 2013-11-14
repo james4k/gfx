@@ -35,7 +35,6 @@ func (u Usage) gl() gl.GLenum {
 	default:
 		return gl.STATIC_DRAW
 	}
-	panic("unreachable")
 }
 
 type VertexFormat uint32
@@ -91,7 +90,6 @@ func (v VertexFormat) AttribBytes() int {
 	default:
 		return 3 * fsize
 	}
-	panic("unreachable")
 }
 
 // attribType gives the GL type of a specific piece of vertex data
@@ -103,7 +101,6 @@ func (v VertexFormat) attribType() gl.GLenum {
 	default:
 		return gl.FLOAT
 	}
-	panic("unreachable")
 }
 
 // attribNormalized specifies integral value to be normalized to [0.0-1.0] for unsigned, yata yata.
@@ -115,7 +112,6 @@ func (v VertexFormat) attribNormalized() bool {
 	default:
 		return false
 	}
-	panic("unreachable")
 }
 
 // attribElems gives the number of elements for a specific piece of vertex data
@@ -141,7 +137,6 @@ func (v VertexFormat) attribElems() uint {
 	default:
 		return 3
 	}
-	panic("unreachable")
 }
 
 // TODO: add tests for Stride and Count

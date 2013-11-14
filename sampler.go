@@ -36,7 +36,6 @@ func Image(img image.Image) (*Sampler2D, error) {
 	default:
 		return nil, image.ErrFormat
 	}
-	panic("unreachable")
 }
 
 func (s *Sampler2D) Release() {
