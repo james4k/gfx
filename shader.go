@@ -50,19 +50,12 @@ func BuildShader(attrs VertexAttributes, srcs ...ShaderSource) *Shader {
 		s := gl.CreateShader(src.typ())
 		s.Source(src.source())
 		s.Compile()
-		// TODO: user should pass in an io.Writer for us to write the log to
-		// TODO: does glGetError give us anything more definitive?
 		println(s.GetInfoLog())
 		shader.prog.AttachShader(s)
 		ss[i] = s
 	}
 	shader.prog.Link()
-	// TODO: user should pass in an io.Writer for us to write the log to
-	// TODO: does glGetError give us anything more definitive?
 	println(shader.prog.GetInfoLog())
-	// TODO: we can probably return an error...but do we provide compile/link
-	// errors or throw those at a logger?
-	// TODO: add finalizer for program
 
 	// No longer need shader objects with a fully built program.
 	for _, s := range ss {
@@ -87,25 +80,19 @@ func (s *Shader) Use() {
 
 // SetUniforms takes struct fields with "uniform" tag and assigns their values
 // to the shader's uniform variables.
-// TODO: really need to return an error; a lot of room for user error here,
-// with uniform names and shit that need to be right.
 func (s *Shader) SetUniforms(data interface{}) {
-	// TODO: recurse down embedded structs to find their fields
 	val := reflect.ValueOf(data)
 	typ := val.Type()
 	n := val.NumField()
 	for i := 0; i < n; i++ {
 		f := typ.Field(i)
 		v := val.Field(i)
-		// TODO: skip unexported fields.. they will panic!
 		name := f.Tag.Get("uniform")
 		if name == "" {
 			continue
 		}
 		iface := v.Interface()
 		switch iface.(type) {
-		// TODO: float arrays up to [4]float32
-		// TODO: samplers
 		case float32:
 			u := s.prog.GetUniformLocation(name)
 			u.Uniform1f(iface.(float32))
@@ -121,7 +108,6 @@ func (s *Shader) SetUniforms(data interface{}) {
 			u.UniformMatrix4f(false, &val)
 		case *Sampler2D:
 			u := s.prog.GetUniformLocation(name)
-			// TODO: need to select texture unit
 			sampler := iface.(*Sampler2D)
 			gl.ActiveTexture(gl.TEXTURE0)
 			sampler.bind()
@@ -141,7 +127,6 @@ type GeometryLayout struct {
 func LayoutGeometry(s *Shader, geom *Geometry) *GeometryLayout {
 	vertices := geom.VertexBuffer
 	if s.vertexFormat != vertices.Format() {
-		// TODO: really need to return an error; mainly for vertex format
 		panic("moo")
 	}
 	vao := gl.GenVertexArray()
@@ -186,7 +171,6 @@ func (g *GeometryLayout) Delete() {
 
 // SetGeometry binds the underlying vertex array object that holds the buffer pointers.
 func (s *Shader) SetGeometry(layout *GeometryLayout) error {
-	// TODO: come up with a more sophistcated layout compatibility check. abstract this away from the shader somehow.
 	if layout.shader != s {
 		return errors.New("gfx: geometry layout not compatible with this shader")
 	}
@@ -198,10 +182,6 @@ func (s *Shader) SetGeometry(layout *GeometryLayout) error {
 
 // Draw makes a glDrawElements call using the previously set uniforms and
 // geometry.
-// TODO: Need to think about glDrawElementsInstanced, and per-instance vertex
-// attributes (glVertexAttribDivisor). Will probably need a separate
-// DrawInstanced() method, or maybe add an instances parameter, or a
-// SetInstances method? Hmmz
 func (s *Shader) Draw() {
 	gl.DrawElements(gl.TRIANGLES, s.indexCount, gl.UNSIGNED_SHORT, uintptr(s.indexOffset))
 }

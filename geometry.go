@@ -39,8 +39,6 @@ func (u Usage) gl() gl.GLenum {
 
 type VertexFormat uint32
 
-// TODO: maybe we don't need all of these texcoords...we need a better way for
-// the user to extend these.
 const (
 	VertexPosition VertexFormat = 1 << iota
 	VertexColor
@@ -62,8 +60,6 @@ const (
 	VertexUserData3
 	MaxVertexFormat = VertexUserData3
 )
-
-// TODO: we need to convert the following 4 funcs into a table or something
 
 // AttribBytes gives the byte size of a specific piece of vertex data
 func (v VertexFormat) AttribBytes() int {
@@ -138,8 +134,6 @@ func (v VertexFormat) attribElems() uint {
 		return 3
 	}
 }
-
-// TODO: add tests for Stride and Count
 
 // Stride gives the stride in bytes for a vertex buffer.
 func (v VertexFormat) Stride() int {
@@ -314,11 +308,6 @@ func (b *IndexBuffer) SetIndices(src []uint16, usage Usage) error {
 	return nil
 }
 
-// TODO: 32-bit indices...maybe need another type altogether
-//func (b *IndexBuffer) SetIndices32(p []uint32) error {
-//panic("NO.")
-//}
-
 type VertexData interface {
 	VertexCount() int
 	VertexFormat() VertexFormat
@@ -393,30 +382,3 @@ func (g *Geometry) CopyFrom(src VertexData) error {
 	}
 	return nil
 }
-
-// StaticGeometry creates a static index/vertex buffer pair, uploads data to
-// GPU and returns the representing Geometry. Panics if vertices length does
-// not fit the format specified. There should be 3 float32's for every vertex
-// channel. It is assumed the vertex data is interleaved.
-/*
-func StaticGeometry(indices []uint16, vertices []float32, format VertexFormat) Geometry {
-	// TODO: sanity check on vertices length based on VertexFormat?
-	stride := format.Stride()
-	if len(vertices)*4%stride != 0 {
-		panic("gfx: vertex count does not fit vertex format")
-	}
-
-	geom := initGeom(StaticDraw)
-
-	var bufs [2]gl.Buffer
-	gl.GenBuffers(bufs[:])
-	bufs[0].Bind(gl.ELEMENT_ARRAY_BUFFER)
-	size := len(indices) * int(unsafe.Sizeof(indices[0]))
-	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, size, &indices[0], gl.STATIC_DRAW)
-	bufs[1].Bind(gl.ARRAY_BUFFER)
-	size = len(vertices) * int(unsafe.Sizeof(vertices[0]))
-	gl.BufferData(gl.ARRAY_BUFFER, size, &vertices[0], gl.STATIC_DRAW)
-
-	return geom
-}
-*/

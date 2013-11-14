@@ -5,9 +5,6 @@ import (
 	"image"
 )
 
-// TODO: we need to supprt image.Image ideally as a source, as well as
-// streaming sources for minimum copying..but that also requires
-// PIXEL_UNPACK_BUFFER
 type Sampler2D struct {
 	tex gl.Texture
 }
@@ -47,7 +44,6 @@ func (s *Sampler2D) bind() {
 }
 
 func imageRGBA(pix []byte, width, height int) (*Sampler2D, error) {
-	// TODO: finalizer
 	s := &Sampler2D{
 		tex: gl.GenTexture(),
 	}
@@ -59,7 +55,6 @@ func imageRGBA(pix []byte, width, height int) (*Sampler2D, error) {
 }
 
 func imageAlpha(pix []byte, width, height int) (*Sampler2D, error) {
-	// TODO: finalizer
 	s := &Sampler2D{
 		tex: gl.GenTexture(),
 	}
