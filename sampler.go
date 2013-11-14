@@ -38,7 +38,7 @@ func Image(img image.Image) (*Sampler2D, error) {
 	}
 }
 
-func (s *Sampler2D) Release() {
+func (s *Sampler2D) Delete() {
 	s.tex.Delete()
 }
 

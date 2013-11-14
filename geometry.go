@@ -203,7 +203,7 @@ func (b *VertexBuffer) bind() {
 	b.buf.Bind(gl.ARRAY_BUFFER)
 }
 
-func (b *VertexBuffer) Release() {
+func (b *VertexBuffer) Delete() {
 	b.buf.Delete()
 }
 
@@ -259,7 +259,7 @@ func (b *IndexBuffer) bind() {
 	b.buf.Bind(gl.ELEMENT_ARRAY_BUFFER)
 }
 
-func (b *IndexBuffer) Release() {
+func (b *IndexBuffer) Delete() {
 	b.buf.Delete()
 }
 
@@ -373,9 +373,9 @@ func allocGeom(usage Usage, hasIndex bool) *Geometry {
 	return geom
 }
 
-func (g *Geometry) Release() {
-	g.VertexBuffer.Release()
-	g.IndexBuffer.Release()
+func (g *Geometry) Delete() {
+	g.VertexBuffer.Delete()
+	g.IndexBuffer.Delete()
 }
 
 // CopyFrom copies vertices from src as well as indices if IndexData

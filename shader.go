@@ -72,7 +72,7 @@ func BuildShader(attrs VertexAttributes, srcs ...ShaderSource) *Shader {
 	return shader
 }
 
-func (s *Shader) Release() {
+func (s *Shader) Delete() {
 	s.prog.Delete()
 }
 
@@ -180,7 +180,7 @@ func LayoutGeometry(s *Shader, geom *Geometry) *GeometryLayout {
 	return layout
 }
 
-func (g *GeometryLayout) Release() {
+func (g *GeometryLayout) Delete() {
 	g.vao.Delete()
 }
 
