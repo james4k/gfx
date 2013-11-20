@@ -13,6 +13,7 @@ type Shader struct {
 
 	indexCount  int
 	indexOffset int
+	indexType   gl.GLenum
 }
 
 type ShaderSource interface {
@@ -175,6 +176,7 @@ func (s *Shader) SetGeometry(layout *GeometryLayout) error {
 		return errors.New("gfx: geometry layout not compatible with this shader")
 	}
 	s.indexCount = layout.idxbuf.Count()
+	s.indexType = layout.idxbuf.elemtype
 	//s.indexOffset = indices.Offset()
 	layout.vao.Bind()
 	return nil
@@ -183,5 +185,5 @@ func (s *Shader) SetGeometry(layout *GeometryLayout) error {
 // Draw makes a glDrawElements call using the previously set uniforms and
 // geometry.
 func (s *Shader) Draw() {
-	gl.DrawElements(gl.TRIANGLES, s.indexCount, gl.UNSIGNED_SHORT, uintptr(s.indexOffset))
+	gl.DrawElements(gl.TRIANGLES, s.indexCount, s.indexType, uintptr(s.indexOffset))
 }

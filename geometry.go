@@ -246,7 +246,8 @@ func (b *VertexBuffer) SetVertices(src []byte, usage Usage) error {
 type IndexBuffer struct {
 	buf gl.Buffer
 	//offset int
-	count int
+	count    int
+	elemtype gl.GLenum
 }
 
 func (b *IndexBuffer) bind() {
@@ -279,22 +280,39 @@ func (b *IndexBuffer) Count() int {
 }
 
 func (b *IndexBuffer) SetIndices(src []uint16, usage Usage) error {
+	buf := uint16buf{buf: src}
+	err := b.setIndices(buf.copyTo, usage, 2*len(src))
+	if err != nil {
+		return err
+	}
+	//b.offset = 0
+	b.count = len(src)
+	b.elemtype = gl.UNSIGNED_SHORT
+	return nil
+}
+
+func (b *IndexBuffer) SetIndices32(src []uint32, usage Usage) error {
+	buf := uint32buf{buf: src}
+	err := b.setIndices(buf.copyTo, usage, 4*len(src))
+	if err != nil {
+		return err
+	}
+	//b.offset = 0
+	b.count = len(src)
+	b.elemtype = gl.UNSIGNED_INT
+	return nil
+}
+
+func (b *IndexBuffer) setIndices(copyTo func(unsafe.Pointer), usage Usage, size int) error {
 	gl.VertexArray(0).Bind()
 	b.bind()
-	idxsize := 2 * len(src)
-	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, idxsize, nil, usage.gl())
-	if idxsize > 0 {
+	gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, size, nil, usage.gl())
+	if size > 0 {
 		const maxretries = 5
 		retries := 0
 		for ; retries < maxretries; retries++ {
 			ptr := gl.MapBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.WRITE_ONLY)
-			slicehdr := reflect.SliceHeader{
-				Data: uintptr(ptr),
-				Len:  len(src),
-				Cap:  len(src),
-			}
-			dest := *(*[]uint16)(unsafe.Pointer(&slicehdr))
-			copy(dest, src)
+			copyTo(ptr)
 			if gl.UnmapBuffer(gl.ELEMENT_ARRAY_BUFFER) {
 				break
 			}
@@ -303,9 +321,35 @@ func (b *IndexBuffer) SetIndices(src []uint16, usage Usage) error {
 			return errMapBufferFailed
 		}
 	}
-	//b.offset = 0
-	b.count = len(src)
 	return nil
+}
+
+type uint16buf struct {
+	buf []uint16
+}
+
+func (b uint16buf) copyTo(dest unsafe.Pointer) {
+	slicehdr := reflect.SliceHeader{
+		Data: uintptr(dest),
+		Len:  len(b.buf),
+		Cap:  len(b.buf),
+	}
+	d := *(*[]uint16)(unsafe.Pointer(&slicehdr))
+	copy(d, b.buf)
+}
+
+type uint32buf struct {
+	buf []uint32
+}
+
+func (b uint32buf) copyTo(dest unsafe.Pointer) {
+	slicehdr := reflect.SliceHeader{
+		Data: uintptr(dest),
+		Len:  len(b.buf),
+		Cap:  len(b.buf),
+	}
+	d := *(*[]uint32)(unsafe.Pointer(&slicehdr))
+	copy(d, b.buf)
 }
 
 type VertexData interface {
