@@ -10,10 +10,10 @@ type Shader struct {
 	prog         gl.Program
 	vertexAttrs  VertexAttributes
 	vertexFormat VertexFormat
-
-	indexCount  int
-	indexOffset int
-	indexType   gl.GLenum
+	texlocs      []gl.UniformLocation
+	indexCount   int
+	indexOffset  int
+	indexType    gl.GLenum
 }
 
 type ShaderSource interface {
@@ -74,9 +74,23 @@ func (s *Shader) VertexFormat() VertexFormat {
 	return s.vertexFormat
 }
 
+// texunit finds a previously assigned texture unit for loc, or
+// selects the next one.
+func (s *Shader) texunit(loc gl.UniformLocation) int {
+	for i, v := range s.texlocs {
+		if loc == v {
+			return i
+		}
+	}
+	v := len(s.texlocs)
+	s.texlocs = append(s.texlocs, loc)
+	return v
+}
+
 // Use puts the shader as the active program to bind data to and execute.
 func (s *Shader) Use() {
 	s.prog.Use()
+	s.texlocs = s.texlocs[:]
 }
 
 // SetUniforms takes struct fields with "uniform" tag and assigns their values
@@ -113,9 +127,10 @@ func (s *Shader) SetUniforms(data interface{}) {
 		case *Sampler2D:
 			u := s.prog.GetUniformLocation(name)
 			sampler := iface.(*Sampler2D)
-			gl.ActiveTexture(gl.TEXTURE0)
+			texunit = s.texunit(u)
+			gl.ActiveTexture(gl.TEXTURE0 + texunit)
 			sampler.bind()
-			u.Uniform1i(0)
+			u.Uniform1i(texunit)
 		}
 	}
 }
