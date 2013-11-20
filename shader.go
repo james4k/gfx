@@ -86,8 +86,11 @@ func (s *Shader) SetUniforms(data interface{}) {
 	typ := val.Type()
 	n := val.NumField()
 	for i := 0; i < n; i++ {
-		f := typ.Field(i)
 		v := val.Field(i)
+		if !v.CanInterface() {
+			continue
+		}
+		f := typ.Field(i)
 		name := f.Tag.Get("uniform")
 		if name == "" {
 			continue
