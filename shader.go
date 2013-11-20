@@ -93,9 +93,9 @@ func (s *Shader) Use() {
 	s.texlocs = s.texlocs[:]
 }
 
-// SetUniforms takes struct fields with "uniform" tag and assigns their values
+// AssignUniforms takes struct fields with "uniform" tag and assigns their values
 // to the shader's uniform variables.
-func (s *Shader) SetUniforms(data interface{}) {
+func (s *Shader) AssignUniforms(data interface{}) {
 	val := reflect.ValueOf(data)
 	typ := val.Type()
 	n := val.NumField()
