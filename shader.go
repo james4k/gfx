@@ -127,8 +127,8 @@ func (s *Shader) AssignUniforms(data interface{}) {
 		case *Sampler2D:
 			u := s.prog.GetUniformLocation(name)
 			sampler := iface.(*Sampler2D)
-			texunit = s.texunit(u)
-			gl.ActiveTexture(gl.TEXTURE0 + texunit)
+			texunit := s.texunit(u)
+			gl.ActiveTexture(gl.TEXTURE0 + gl.GLenum(texunit))
 			sampler.bind()
 			u.Uniform1i(texunit)
 		}
