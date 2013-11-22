@@ -137,6 +137,9 @@ func (s *Shader) AssignUniforms(data interface{}) error {
 
 func (s *Shader) assign(ptr unsafe.Pointer, val reflect.Value, typ reflect.Type, name string) error {
 	u := s.prog.GetUniformLocation(name)
+	if u < 0 {
+		return fmt.Errorf("gfx: unknown uniform variable '%s'", name)
+	}
 	if typ.Kind() == reflect.Ptr {
 		if s.assignPrimitive(unsafe.Pointer(val.Pointer()), typ.Elem(), u) {
 			return nil
