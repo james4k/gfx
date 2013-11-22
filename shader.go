@@ -98,6 +98,7 @@ func (s *Shader) Use() {
 // AssignUniforms takes struct fields with "uniform" tag and assigns their values
 // to the shader's uniform variables. data must be a pointer to a struct.
 func (s *Shader) AssignUniforms(data interface{}) error {
+	var err error
 	val := reflect.ValueOf(data)
 	ptr := val.Pointer()
 	val = val.Elem()
@@ -109,11 +110,24 @@ func (s *Shader) AssignUniforms(data interface{}) error {
 			continue
 		}
 		f := typ.Field(i)
+		if f.Anonymous {
+			switch f.Type.Kind() {
+			case reflect.Struct:
+				err = s.AssignUniforms(v.Addr().Interface())
+			case reflect.Ptr:
+				if !v.IsNil() && f.Type.Elem().Kind() == reflect.Struct {
+					err = s.AssignUniforms(v.Interface())
+				}
+			}
+			if err != nil {
+				return err
+			}
+		}
 		name := f.Tag.Get("uniform")
 		if name == "" {
 			continue
 		}
-		err := s.assign(unsafe.Pointer(ptr+f.Offset), v, f.Type, name)
+		err = s.assign(unsafe.Pointer(ptr+f.Offset), v, f.Type, name)
 		if err != nil {
 			return err
 		}
