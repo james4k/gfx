@@ -2,8 +2,10 @@ package gfx
 
 import (
 	"errors"
+	"fmt"
 	"github.com/go-gl/gl"
 	"reflect"
+	"unsafe"
 )
 
 type Shader struct {
@@ -94,9 +96,11 @@ func (s *Shader) Use() {
 }
 
 // AssignUniforms takes struct fields with "uniform" tag and assigns their values
-// to the shader's uniform variables.
-func (s *Shader) AssignUniforms(data interface{}) {
+// to the shader's uniform variables. data must be a pointer to a struct.
+func (s *Shader) AssignUniforms(data interface{}) error {
 	val := reflect.ValueOf(data)
+	ptr := val.Pointer()
+	val = val.Elem()
 	typ := val.Type()
 	n := val.NumField()
 	for i := 0; i < n; i++ {
@@ -109,30 +113,93 @@ func (s *Shader) AssignUniforms(data interface{}) {
 		if name == "" {
 			continue
 		}
-		iface := v.Interface()
-		switch iface.(type) {
-		case float32:
-			u := s.prog.GetUniformLocation(name)
-			u.Uniform1f(iface.(float32))
-		case Mat3:
-			u := s.prog.GetUniformLocation(name)
-			u.UniformMatrix3f(false, iface.(Mat3).Pointer())
-		case Mat4:
-			u := s.prog.GetUniformLocation(name)
-			u.UniformMatrix4f(false, iface.(Mat4).Pointer())
-		case [16]float32:
-			u := s.prog.GetUniformLocation(name)
-			val := iface.([16]float32)
-			u.UniformMatrix4f(false, &val)
-		case *Sampler2D:
-			u := s.prog.GetUniformLocation(name)
-			sampler := iface.(*Sampler2D)
-			texunit := s.texunit(u)
-			gl.ActiveTexture(gl.TEXTURE0 + gl.GLenum(texunit))
-			sampler.bind()
-			u.Uniform1i(texunit)
+		err := s.assign(unsafe.Pointer(ptr+f.Offset), v, f.Type, name)
+		if err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+func (s *Shader) assign(ptr unsafe.Pointer, val reflect.Value, typ reflect.Type, name string) error {
+	u := s.prog.GetUniformLocation(name)
+	if typ.Kind() == reflect.Ptr {
+		if s.assignPrimitive(unsafe.Pointer(val.Pointer()), typ.Elem(), u) {
+			return nil
+		}
+	} else if s.assignPrimitive(ptr, typ, u) {
+		return nil
+	}
+	iface := val.Interface()
+	switch iface.(type) {
+	// special types
+	case *Sampler2D:
+		sampler := iface.(*Sampler2D)
+		texunit := s.texunit(u)
+		gl.ActiveTexture(gl.TEXTURE0 + gl.GLenum(texunit))
+		sampler.bind()
+		u.Uniform1i(texunit)
+	default:
+		return fmt.Errorf("gfx: invalid uniform type %v", typ)
+	}
+	return nil
+}
+
+func (s *Shader) assignPrimitive(ptr unsafe.Pointer, typ reflect.Type, u gl.UniformLocation) bool {
+	switch typ.Kind() {
+	// basic primitives
+	case reflect.Int:
+		u.Uniform1i(*(*int)(ptr))
+	case reflect.Int32:
+		u.Uniform1i(int(*(*int32)(ptr)))
+	case reflect.Float32:
+		u.Uniform1f(*(*float32)(ptr))
+	// arrays represent vectors or matrices
+	case reflect.Array:
+		size := typ.Len()
+		elemtyp := typ.Elem()
+		switch elemtyp.Kind() {
+		case reflect.Int32:
+			switch size {
+			case 2:
+				slice := (*(*[2]int32)(ptr))[:]
+				u.Uniform2iv(1, slice)
+			case 3:
+				slice := (*(*[3]int32)(ptr))[:]
+				u.Uniform3iv(1, slice)
+			case 4:
+				slice := (*(*[4]int32)(ptr))[:]
+				u.Uniform4iv(1, slice)
+			default:
+				return false
+			}
+		case reflect.Float32:
+			switch size {
+			case 2:
+				slice := (*(*[2]float32)(ptr))[:]
+				u.Uniform2fv(1, slice)
+			case 3:
+				slice := (*(*[3]float32)(ptr))[:]
+				u.Uniform3fv(1, slice)
+			case 4:
+				slice := (*(*[4]float32)(ptr))[:]
+				u.Uniform4fv(1, slice)
+			case 9:
+				matptr := (*[9]float32)(ptr)
+				u.UniformMatrix3f(false, matptr)
+			case 16:
+				matptr := (*[16]float32)(ptr)
+				u.UniformMatrix4f(false, matptr)
+			default:
+				return false
+			}
+		default:
+			return false
+		}
+	default:
+		return false
+	}
+	return true
 }
 
 type GeometryLayout struct {
